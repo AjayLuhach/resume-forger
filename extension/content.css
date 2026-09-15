@@ -1,0 +1,21 @@
+/* Job Scanner — Visual feedback */
+.job-scanner-analyzing {
+  outline: 2px dashed #ffaa00 !important;
+  outline-offset: -2px;
+  transition: outline 0.3s ease;
+}
+
+.job-scanner-good {
+  outline: 2px solid #44ff44 !important;
+  outline-offset: -2px;
+}
+
+.job-scanner-skip {
+  outline: 2px solid #ff4444 !important;
+  outline-offset: -2px;
+}
+
+.job-scanner-maybe {
+  outline: 2px solid #ffaa00 !important;
+  outline-offset: -2px;
+}

@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+<style>
+  .settings { display: grid; gap: 18px; max-width: 760px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-lg);
+    padding: 20px 22px;
+  }
+  .panel__head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .panel__title {
+    font: 700 16.5px/1.2 var(--sans);
+    color: var(--ink);
+  }
+  .panel__sub {
+    font: 500 14px/1.5 var(--sans);
+    color: var(--ink-3);
+    margin-bottom: 16px;
+  }
+
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .field input,
+  .field select {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font: 500 15px/1.4 var(--sans);
+    outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--gold); }
+  .field input[readonly] { color: var(--ink-3); cursor: not-allowed; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+
+  /* Compact URL row: input fills the remaining width, remove button is
+     just big enough for the glyph. Not using .row because that's a 3-col
+     grid tuned for the SMTP host/port/security trio. */
+  .url-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .url-row input {
+    flex: 1;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font: 500 14px/1.4 var(--sans);
+    outline: none;
+  }
+  .url-row input:focus { border-color: var(--gold); }
+  .url-row .url-remove {
+    flex: 0 0 auto;
+    width: 32px; height: 32px;
+    padding: 0;
+    display: grid; place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-3);
+    font: 600 14px/1 var(--mono);
+    cursor: pointer;
+  }
+  .url-row .url-remove:hover { color: var(--brick); border-color: var(--brick); }
+
+  .actions {
+    display: flex; gap: 8px; align-items: center;
+    margin-top: 12px;
+  }
+  .btn {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font: 600 14px/1 var(--sans);
+    cursor: pointer;
+  }
+  .btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .btn--primary {
+    background: var(--gold); border-color: var(--gold); color: var(--bg);
+  }
+  .btn--primary:hover { background: var(--gold-2); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .status {
+    font: 600 12.5px/1.2 var(--mono);
+    color: var(--ink-3);
+    margin-left: 6px;
+  }
+  .status[data-tone="ok"]   { color: var(--moss); }
+  .status[data-tone="err"]  { color: var(--brick); }
+
+  .panel__footnote {
+    font: 500 12.5px/1.5 var(--sans);
+    color: var(--ink-4);
+    margin-top: 12px;
+  }
+  .panel__footnote code {
+    color: var(--gold);
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.95em;
+  }
+
+  /* Shared job sources — one card per peer database. */
+  .peer-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .peer-empty { font: 500 13px/1.5 var(--sans); color: var(--ink-4); }
+  .peer {
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+  .peer__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-4); flex: 0 0 auto; }
+  .dot[data-state="ok"]       { background: var(--moss); }
+  .dot[data-state="syncing"]  { background: var(--gold); animation: peerpulse 1s ease-in-out infinite; }
+  .dot[data-state="error"]    { background: var(--brick); }
+  .dot[data-state="disabled"] { background: var(--ink-4); }
+  .dot[data-state="never"]    { background: var(--slate); }
+  @keyframes peerpulse { 50% { opacity: 0.35; } }
+  .peer__label { font: 700 14.5px/1.2 var(--sans); color: var(--ink); }
+  .peer__state { font: 600 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+  .peer__meta { font: 500 12px/1.3 var(--mono); color: var(--ink-3); word-break: break-all; margin-top: 4px; }
+  .peer__stats { font: 500 12.5px/1.5 var(--sans); color: var(--ink-2); margin-top: 6px; }
+  .peer__bar { height: 3px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .peer__bar > i { display: block; height: 100%; background: var(--gold); }
+  .peer__error { font: 500 12.5px/1.4 var(--sans); color: var(--brick); margin-top: 6px; }
+  .peer__note { font: 500 12px/1.45 var(--mono); color: var(--ink-3); margin-top: 6px; white-space: pre-wrap; }
+  .peer__note[data-tone="ok"]  { color: var(--moss); }
+  .peer__note[data-tone="err"] { color: var(--brick); }
+  .peer__actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .btn--sm { padding: 5px 10px; font-size: 12.5px; }
+  .btn--danger:hover { color: var(--brick); border-color: var(--brick); }
+  .row--peer { grid-template-columns: 2fr 1fr 1.2fr; align-items: end; }
+  @media (max-width: 640px) { .row--peer { grid-template-columns: 1fr; } }
+  .check { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 0; font: 500 14px/1.2 var(--sans); color: var(--ink-2); }
+  .check input { width: auto; }
+  .howto { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+  .howto__title { font: 700 13px/1.2 var(--sans); color: var(--ink-2); margin-bottom: 6px; }
+  .howto ol { margin: 0; padding-left: 18px; font: 500 12.5px/1.6 var(--sans); color: var(--ink-3); }
+  .howto strong { color: var(--ink-2); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="page-head">
+    <div>
+      <div class="page-head__eyebrow">You</div>
+      <h1 class="page-head__title">Settings</h1>
+      <p class="page-head__lead" id="acctSub">Loading…</p>
+    </div>
+  </div>
+
+  <div class="settings">
+
+    <!-- Account -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Account</div>
+      </div>
+      <div class="panel__sub">Login email and password. Username is set when the account is created and is not editable here.</div>
+      <div class="field">
+        <label>Username</label>
+        <input id="username" readonly>
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input id="email" type="email" autocomplete="email">
+      </div>
+      <div class="actions">
+        <button class="btn btn--primary" id="saveEmail">Save email</button>
+        <span class="status" id="emailStatus"></span>
+      </div>
+    </div>
+
+    <!-- Password -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Password</div>
+      </div>
+      <div class="panel__sub">At least 6 characters. The current password is required to change it.</div>
+      <div class="field">
+        <label>Current password</label>
+        <input id="currentPassword" type="password" autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label>New password</label>
+        <input id="newPassword" type="password" autocomplete="new-password">
+      </div>
+      <div class="actions">
+        <button class="btn btn--primary" id="savePassword">Change password</button>
+        <span class="status" id="passwordStatus"></span>
+      </div>
+    </div>
+
+    <!-- SMTP -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Email sending (SMTP)</div>
+      </div>
+      <div class="panel__sub">Used to send outreach emails as you. Stored per user, so collaborators can send under their own identity.</div>
+      <div class="field">
+        <label>From name</label>
+        <input id="fromName" placeholder="Your full name as shown to recipients">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>SMTP host</label>
+          <input id="smtpHost" placeholder="smtp.gmail.com">
+        </div>
+        <div class="field">
+          <label>Port</label>
+          <input id="smtpPort" type="number" placeholder="587">
+        </div>
+        <div class="field">
+          <label>Security</label>
+          <select id="smtpSecure">
+            <option value="false">STARTTLS (587)</option>
+            <option value="true">TLS (465)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>SMTP user</label>
+        <input id="smtpUser" autocomplete="username" placeholder="usually the same as your email">
+      </div>
+      <div class="field">
+        <label>SMTP password</label>
+        <input id="smtpPass" type="password" autocomplete="new-password" placeholder="leave blank to keep existing">
+      </div>
+      <div class="actions">
+        <button class="btn btn--primary" id="saveSmtp">Save SMTP</button>
+        <span class="status" id="smtpStatus"></span>
+      </div>
+      <div class="panel__footnote">
+        For Gmail, generate an <code>App password</code> at myaccount.google.com → Security. Don't use your account password.
+      </div>
+    </div>
+
+    <!-- Daily-reminder URLs -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Daily reminder tabs</div>
+      </div>
+      <div class="panel__sub">URLs that pop in new tabs on the first refresh-click each day from the Apply page. Use it as a habit nudge — e.g. your LinkedIn summary edit page, your Naukri profile, anything you want to keep fresh. Leave empty to disable.</div>
+      <div id="dailyReminderRows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+      <div class="actions">
+        <button class="btn" id="addDailyReminder" type="button">+ Add URL</button>
+        <button class="btn btn--primary" id="saveDailyReminders" type="button">Save</button>
+        <span class="status" id="dailyRemindersStatus"></span>
+      </div>
+    </div>
+
+    <!-- Profile -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Profile data</div>
+      </div>
+      <div class="panel__sub">Your resume JSON, PDF, and tailored variants live on the Resume page.</div>
+      <a class="btn" href="/resume.html">Open Resume →</a>
+    </div>
+
+    <!-- Shared job sources (peer databases) -->
+    <div class="panel" id="peersPanel">
+      <div class="panel__head">
+        <div class="panel__title">Shared job sources</div>
+        <span class="status" id="peersPoll"></span>
+      </div>
+      <div class="panel__sub">
+        Other people's databases whose already-analysed jobs are pulled into your Apply queue every 30 seconds, so you can triage what they scraped without opening the listings again. Their connection string stays on this machine (<code>data/peers.json</code>) — it is never written to your database.
+      </div>
+
+      <div class="peer-list" id="peerList"><div class="peer-empty">No sources yet.</div></div>
+
+      <div class="field">
+        <label>Label</label>
+        <input id="peerLabel" placeholder="whose database this is, e.g. a friend's name" maxlength="60">
+      </div>
+      <div class="field">
+        <label>Connection string</label>
+        <input id="peerUri" autocomplete="off" spellcheck="false" placeholder="mongodb+srv://user:password@cluster.mongodb.net/dbname">
+      </div>
+      <div class="row row--peer">
+        <div class="field">
+          <label>Database</label>
+          <input id="peerDb" placeholder="defaults to the one in the connection string">
+        </div>
+        <div class="field">
+          <label>Window (days)</label>
+          <input id="peerWindow" type="number" min="1" max="365" value="30">
+        </div>
+        <div class="field">
+          <label class="check"><input id="peerIncludeRejected" type="checkbox"> Include jobs they rejected</label>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn--primary" id="addPeer" type="button">Test &amp; add</button>
+        <button class="btn" id="syncAllPeers" type="button">Sync all now</button>
+        <span class="status" id="peerAddStatus"></span>
+      </div>
+
+      <div class="howto">
+        <div class="howto__title">How to share YOUR database with someone</div>
+        <ol>
+          <li>Atlas → <strong>Database Access</strong> → Add New Database User. Under privileges pick <strong>Custom Role</strong> and grant only <code>find</code> on <code>&lt;your db&gt;.job_tracker</code>. Never hand out the built-in <code>read</code> role: it exposes your <code>users</code> document, and with it your SMTP password and mail.</li>
+          <li>Atlas → <strong>Network Access</strong> → add the friend's public IP.</li>
+          <li>Send them the connection string for that user. When they paste it here, the Test button warns them if the credential can read more than it should.</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const setStatus = (id, text, tone = '') => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.tone = tone;
+    if (tone === 'ok') setTimeout(() => { el.textContent = ''; el.dataset.tone = ''; }, 4500);
+  };
+
+
+  async function load() {
+    const r = await fetch('/api/settings');
+    if (!r.ok) {
+      if (r.status === 401) location.href = '/login.html';
+      return;
+    }
+    const data = await r.json();
+    $('username').value = data.account.username;
+    $('email').value = data.account.email || '';
+    $('acctSub').textContent = `Signed in as ${data.account.username}`;
+    const cfg = data.smtp;
+    if (cfg) {
+      $('fromName').value = cfg.fromName || '';
+      $('smtpHost').value = cfg.smtp?.host || '';
+      $('smtpPort').value = cfg.smtp?.port || 587;
+      $('smtpSecure').value = String(!!cfg.smtp?.secure);
+      $('smtpUser').value = cfg.smtp?.user || '';
+      // password intentionally left blank — server preserves it
+    } else {
+      $('smtpPort').value = 587;
+    }
+    renderDailyReminderRows(Array.isArray(data.dailyReminderUrls) ? data.dailyReminderUrls : []);
+  }
+
+  // Render the list of URL inputs. Empty state still shows one row so
+  // there's an obvious place to start typing.
+  function renderDailyReminderRows(urls) {
+    const root = $('dailyReminderRows');
+    const values = urls.length ? urls : [''];
+    root.innerHTML = values.map((u, i) => `
+      <div class="url-row" data-row="${i}">
+        <input type="url" inputmode="url" placeholder="https://…" value="${u.replace(/"/g, '&quot;')}">
+        <button class="url-remove" type="button" data-remove="${i}" title="Remove">✕</button>
+      </div>`).join('');
+    root.querySelectorAll('[data-remove]').forEach(b => {
+      b.addEventListener('click', () => {
+        b.closest('[data-row]').remove();
+      });
+    });
+  }
+
+  function collectDailyReminderUrls() {
+    return [...$('dailyReminderRows').querySelectorAll('input[type="url"]')]
+      .map(i => i.value.trim())
+      .filter(Boolean);
+  }
+
+  $('saveEmail').addEventListener('click', async () => {
+    const btn = $('saveEmail'); btn.disabled = true;
+    setStatus('emailStatus', 'Saving…');
+    try {
+      const r = await fetch('/api/settings/email', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: $('email').value.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setStatus('emailStatus', 'Saved', 'ok');
+    } catch (e) {
+      setStatus('emailStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  $('savePassword').addEventListener('click', async () => {
+    const btn = $('savePassword'); btn.disabled = true;
+    setStatus('passwordStatus', 'Saving…');
+    try {
+      const r = await fetch('/api/settings/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: $('currentPassword').value,
+          newPassword: $('newPassword').value,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      $('currentPassword').value = '';
+      $('newPassword').value = '';
+      setStatus('passwordStatus', 'Password changed', 'ok');
+    } catch (e) {
+      setStatus('passwordStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  $('saveSmtp').addEventListener('click', async () => {
+    const btn = $('saveSmtp'); btn.disabled = true;
+    setStatus('smtpStatus', 'Saving…');
+    try {
+      const r = await fetch('/api/settings/smtp', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromName: $('fromName').value,
+          smtp: {
+            host: $('smtpHost').value.trim(),
+            port: Number($('smtpPort').value) || 587,
+            secure: $('smtpSecure').value === 'true',
+            user: $('smtpUser').value.trim(),
+            pass: $('smtpPass').value,
+          },
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      $('smtpPass').value = '';
+      setStatus('smtpStatus', 'Saved', 'ok');
+    } catch (e) {
+      setStatus('smtpStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  $('addDailyReminder').addEventListener('click', () => {
+    const root = $('dailyReminderRows');
+    const i = root.children.length;
+    const div = document.createElement('div');
+    div.className = 'url-row';
+    div.dataset.row = String(i);
+    div.innerHTML = `
+      <input type="url" inputmode="url" placeholder="https://…">
+      <button class="url-remove" type="button" title="Remove">✕</button>`;
+    div.querySelector('button').addEventListener('click', () => div.remove());
+    root.appendChild(div);
+    div.querySelector('input').focus();
+  });
+
+  $('saveDailyReminders').addEventListener('click', async () => {
+    const btn = $('saveDailyReminders'); btn.disabled = true;
+    setStatus('dailyRemindersStatus', 'Saving…');
+    try {
+      const urls = collectDailyReminderUrls();
+      const r = await fetch('/api/settings/daily-reminders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      renderDailyReminderRows(d.dailyReminderUrls || []);
+      setStatus('dailyRemindersStatus', `Saved (${d.dailyReminderUrls.length})`, 'ok');
+    } catch (e) {
+      setStatus('dailyRemindersStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  load();
+
+  // ── Shared job sources ─────────────────────────────────────────────────
+  // The list re-renders on every poll, so anything transient (a test
+  // result, a sync summary) lives in `peerNotes` keyed by peer id and is
+  // re-applied after each render rather than being lost with the old DOM.
+  const PEERS_API = '/api/settings/peers';
+  const POLL_MS = 10_000;
+  let peers = [];
+  const peerNotes = new Map();   // id -> { text, tone }
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  const rel = (iso) => {
+    if (!iso) return 'never';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (!Number.isFinite(ms)) return 'never';
+    if (ms < 0) return 'in ' + rel(new Date(Date.now() - ms).toISOString()).replace(' ago', '');
+    const s = Math.round(ms / 1000);
+    if (s < 45) return 'just now';
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    if (h < 36) return `${h} h ago`;
+    return `${Math.round(h / 24)} d ago`;
+  };
+
+  const peerState = (p) => {
+    if (p.state.syncing) return 'syncing';
+    if (!p.enabled) return 'disabled';
+    if (p.state.lastError) return 'error';
+    if (p.state.lastSyncAt) return 'ok';
+    return 'never';
+  };
+  const STATE_LABEL = { syncing: 'syncing', disabled: 'disabled', error: 'error', ok: 'ok', never: 'never synced' };
+
+  function renderPeers() {
+    const root = $('peerList');
+    if (!peers.length) {
+      root.innerHTML = '<div class="peer-empty">No sources yet. Add someone\'s connection string below.</div>';
+      return;
+    }
+    root.innerHTML = peers.map((p) => {
+      const st = peerState(p);
+      const s = p.state;
+      const seen = (s.imported || 0) + (s.updated || 0) + (s.skipped || 0);
+      const remote = Number.isFinite(s.remoteAnalyzedCount) ? s.remoteAnalyzedCount : null;
+      const pct = remote ? Math.min(100, Math.round((seen / remote) * 100)) : 0;
+      const reasons = Object.entries(s.skippedReasons || {}).map(([k, n]) => `${k} ${n}`).join(', ');
+      const note = peerNotes.get(p.id);
+      return `
+      <div class="peer" data-id="${esc(p.id)}">
+        <div class="peer__head">
+          <span class="dot" data-state="${st}"></span>
+          <span class="peer__label">${esc(p.label)}</span>
+          <span class="peer__state">${STATE_LABEL[st]}</span>
+        </div>
+        <div class="peer__meta">${esc(p.hosts.join(', ') || '?')} / ${esc(p.db)}${p.collection !== 'job_tracker' ? '.' + esc(p.collection) : ''} · last ${p.windowDays} days${p.includePeerRejected ? ' · incl. their rejected' : ''}</div>
+        <div class="peer__stats">
+          Last sync ${esc(rel(s.lastSyncAt))}${s.syncing ? ' (running)' : ''}
+          · <strong>${s.imported || 0}</strong> imported
+          · ${s.updated || 0} updated
+          · ${s.skipped || 0} skipped${reasons ? ` <span title="${esc(reasons)}">(${esc(reasons)})</span>` : ''}
+          ${remote != null ? `· ${remote} analysed on their side` : ''}
+        </div>
+        ${remote ? `<div class="peer__bar" title="${seen} of ${remote} rows seen"><i style="width:${pct}%"></i></div>` : ''}
+        ${s.lastError ? `<div class="peer__error">${esc(s.lastError)}${s.lastErrorAt ? ` <span style="opacity:.7">(${esc(rel(s.lastErrorAt))})</span>` : ''}</div>` : ''}
+        ${note ? `<div class="peer__note" data-tone="${note.tone || ''}">${esc(note.text)}</div>` : ''}
+        <div class="peer__actions">
+          <button class="btn btn--sm" data-action="test" type="button">Test</button>
+          <button class="btn btn--sm" data-action="sync" type="button" ${s.syncing ? 'disabled' : ''}>Sync now</button>
+          <button class="btn btn--sm" data-action="toggle" type="button">${p.enabled ? 'Disable' : 'Enable'}</button>
+          <button class="btn btn--sm btn--danger" data-action="remove" type="button">Remove</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function loadPeers() {
+    try {
+      const r = await fetch(PEERS_API);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      peers = Array.isArray(d.peers) ? d.peers : [];
+      renderPeers();
+      $('peersPoll').textContent = '';
+    } catch (e) {
+      $('peersPoll').textContent = e.message;
+      $('peersPoll').dataset.tone = 'err';
+    }
+  }
+
+  const describeTest = (t) => {
+    if (!t) return { text: 'No result', tone: 'err' };
+    if (!t.ok) return { text: `${t.code}: ${t.hint || ''}${t.detail ? `\n${t.detail}` : ''}`, tone: 'err' };
+    const lines = [`Connected in ${t.ms} ms — ${t.remoteAnalyzedCount} analysed job(s) in the window`];
+    if (t.sampleTitles?.length) lines.push(`e.g. ${t.sampleTitles.join(' | ')}`);
+    if (t.scopeWarning) lines.push(`Warning: ${t.scopeWarning}`);
+    return { text: lines.join('\n'), tone: t.scopeWarning ? '' : 'ok' };
+  };
+
+  const describeSync = (r) => {
+    if (!r) return { text: 'No result', tone: 'err' };
+    if (!r.ok) return { text: `${r.code}: ${r.hint || ''}`, tone: 'err' };
+    const reasons = Object.entries(r.skippedReasons || {}).map(([k, n]) => `${k} ${n}`).join(', ');
+    return { text: `+${r.imported} imported, ${r.updated} updated, ${r.skipped} skipped${reasons ? ` (${reasons})` : ''}`, tone: 'ok' };
+  };
+
+  $('peerList').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-action]');
+    if (!btn) return;
+    const card = btn.closest('[data-id]');
+    const id = card?.dataset.id;
+    const peer = peers.find((p) => p.id === id);
+    if (!peer) return;
+    const action = btn.dataset.action;
+    const busy = (on) => card.querySelectorAll('button').forEach((b) => { b.disabled = on; });
+    busy(true);
+    try {
+      if (action === 'test') {
+        peerNotes.set(id, { text: 'Testing…', tone: '' }); renderPeers();
+        const r = await fetch(`${PEERS_API}/${encodeURIComponent(id)}/test`, { method: 'POST' });
+        const d = await r.json();
+        peerNotes.set(id, r.ok ? describeTest(d) : { text: d.error || `HTTP ${r.status}`, tone: 'err' });
+      } else if (action === 'sync') {
+        peerNotes.set(id, { text: 'Syncing…', tone: '' }); renderPeers();
+        const r = await fetch(`${PEERS_API}/${encodeURIComponent(id)}/sync`, { method: 'POST' });
+        const d = await r.json();
+        peerNotes.set(id, r.ok ? describeSync(d) : { text: d.error || `HTTP ${r.status}`, tone: 'err' });
+      } else if (action === 'toggle') {
+        const r = await fetch(`${PEERS_API}/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: !peer.enabled }),
+        });
+        const d = await r.json();
+        if (!r.ok) peerNotes.set(id, { text: d.error || `HTTP ${r.status}`, tone: 'err' });
+        else peerNotes.delete(id);
+      } else if (action === 'remove') {
+        if (!confirm(`Remove "${peer.label}"?`)) return;
+        const imported = peer.state.imported || 0;
+        const purge = imported > 0 && confirm(
+          `Also delete the jobs imported from "${peer.label}" that you have not applied to or rejected yourself?\n\nOK = delete them from your Apply queue\nCancel = keep them`,
+        );
+        const r = await fetch(`${PEERS_API}/${encodeURIComponent(id)}${purge ? '?purge=1' : ''}`, { method: 'DELETE' });
+        const d = await r.json();
+        if (!r.ok) { peerNotes.set(id, { text: d.error || `HTTP ${r.status}`, tone: 'err' }); }
+        else {
+          peerNotes.delete(id);
+          setStatus('peerAddStatus', purge ? `Removed · ${d.purged} imported job(s) deleted` : 'Removed', 'ok');
+        }
+      }
+    } catch (e) {
+      peerNotes.set(id, { text: e.message, tone: 'err' });
+    } finally {
+      busy(false);
+      await loadPeers();
+    }
+  });
+
+  $('addPeer').addEventListener('click', async () => {
+    const btn = $('addPeer'); btn.disabled = true;
+    setStatus('peerAddStatus', 'Testing connection…');
+    try {
+      const body = {
+        label: $('peerLabel').value.trim(),
+        uri: $('peerUri').value.trim(),
+        db: $('peerDb').value.trim(),
+        windowDays: Number($('peerWindow').value) || 30,
+        includePeerRejected: $('peerIncludeRejected').checked,
+      };
+      const r = await fetch(PEERS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        const t = d.test;
+        throw new Error(t && !t.ok ? `${t.code}: ${t.hint}` : (d.error || `HTTP ${r.status}`));
+      }
+      $('peerLabel').value = ''; $('peerUri').value = ''; $('peerDb').value = '';
+      $('peerWindow').value = '30'; $('peerIncludeRejected').checked = false;
+      if (d.peer?.id) peerNotes.set(d.peer.id, describeTest(d.test));
+      setStatus('peerAddStatus', `Added "${d.peer.label}" — first sync running`, 'ok');
+      await loadPeers();
+    } catch (e) {
+      setStatus('peerAddStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  $('syncAllPeers').addEventListener('click', async () => {
+    const btn = $('syncAllPeers'); btn.disabled = true;
+    setStatus('peerAddStatus', 'Syncing all…');
+    try {
+      const r = await fetch(`${PEERS_API}/sync`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      let imported = 0;
+      for (const [id, res] of Object.entries(d.results || {})) {
+        peerNotes.set(id, describeSync(res));
+        imported += res.imported || 0;
+      }
+      setStatus('peerAddStatus', `Done — ${imported} imported`, 'ok');
+      await loadPeers();
+    } catch (e) {
+      setStatus('peerAddStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  // Poll only while the panel is actually on screen: the tab is in the
+  // foreground and the panel is scrolled into view.
+  let panelVisible = true;
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(([entry]) => { panelVisible = entry.isIntersecting; }, { threshold: 0 })
+      .observe($('peersPanel'));
+  }
+  setInterval(() => { if (!document.hidden && panelVisible) loadPeers(); }, POLL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadPeers(); });
+  loadPeers();
+})();
+</script>
+</body>
+</html>

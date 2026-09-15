@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connections · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+<style>
+  .conn-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .conn-search {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font: 500 14.5px/1.4 var(--sans);
+    outline: none;
+    min-width: 260px;
+  }
+  .conn-search:focus { border-color: var(--gold); }
+
+  .conn-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .conn-stats__cell {
+    padding: 10px 14px 8px;
+    box-shadow: inset -1px 0 0 0 var(--line-soft), inset 0 -1px 0 0 var(--line-soft);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .conn-stats__val { font: 700 20px/1.1 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); }
+  .conn-stats__val[data-tone="gold"]  { color: var(--gold); }
+  .conn-stats__val[data-tone="moss"]  { color: var(--moss); }
+  .conn-stats__lab { font: 600 10px/1.2 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+
+  .conn-sort {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font: 500 12.5px/1 var(--sans);
+    cursor: pointer;
+  }
+
+  .card-list { display: flex; flex-direction: column; gap: 12px; }
+  .job-card {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-left: 3px solid var(--gold-line);
+    border-radius: 8px;
+    padding: 14px 16px 6px;
+  }
+  .job-card__head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--line-soft);
+    margin-bottom: 6px;
+  }
+  .job-card__title {
+    font: 600 14px/1.3 var(--sans); color: var(--ink);
+    text-decoration: none;
+  }
+  .job-card__title:hover { color: var(--gold); }
+  .job-card__company {
+    font: 500 13px/1.3 var(--sans); color: var(--ink-2);
+    margin-left: 4px;
+  }
+  .job-card__meta { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .pill {
+    display: inline-block;
+    font: 600 10.5px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 4px 8px; border-radius: 4px;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-3);
+  }
+  .pill--moss   { background: var(--moss-soft);  border-color: var(--moss);  color: var(--moss); }
+  .pill--gold   { background: var(--gold-soft);  border-color: var(--gold-line); color: var(--gold); }
+
+  .conn-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .conn-row:last-child { border-bottom: 0; }
+  .conn-row__info { min-width: 0; }
+  .conn-row__name a {
+    font: 600 13px/1.3 var(--sans); color: var(--ink);
+    text-decoration: none;
+  }
+  .conn-row__name a:hover { color: var(--gold); }
+  .conn-row__name .when {
+    font: 500 11px/1 var(--mono); letter-spacing: 0.04em;
+    color: var(--ink-3); margin-left: 8px;
+  }
+  .conn-row__headline {
+    font: 500 12px/1.4 var(--sans); color: var(--ink-2);
+    margin-top: 2px;
+    word-break: break-word;
+  }
+  .conn-row__actions { display: inline-flex; gap: 6px; }
+
+  .conn-photo {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--ink-3); display: grid; place-items: center;
+    font: 600 13px/1 var(--sans);
+    background-size: cover; background-position: center;
+  }
+
+  .row-btn {
+    display: inline-block;
+    font: 600 11px/1 var(--mono); letter-spacing: 0.06em;
+    padding: 6px 10px;
+    border-radius: 4px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .row-btn--msg { border: 1px solid var(--gold-line); color: var(--gold); background: var(--gold-soft); }
+  .row-btn--msg:hover { background: var(--gold-soft-2, var(--gold-soft)); }
+  .row-btn--profile { border: 1px solid var(--line); color: var(--ink-2); background: var(--surface-2); }
+  .row-btn--profile:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  .empty-state { text-align: center; padding: 40px 0; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="page-head">
+    <div>
+      <div class="page-head__eyebrow">Direct</div>
+      <h1 class="page-head__title">Connections</h1>
+      <p class="page-head__lead">LinkedIn connections scraped by the Job Scanner extension. Match column shows companies with pending or applied jobs in your apply tracker.</p>
+    </div>
+  </div>
+
+  <div class="conn-stats" id="connStats"></div>
+
+  <div class="conn-toolbar">
+    <input type="text" id="connSearch" class="conn-search" placeholder="Search name, headline, company…">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div id="viewPills" style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="filter-btn active" data-view="recent">Recently connected</button>
+        <button class="filter-btn" data-view="applied">Recently applied · has connects</button>
+      </div>
+      <span style="font:500 12px/1 var(--mono);color:var(--ink-3)" id="connMeta"></span>
+    </div>
+  </div>
+
+  <div id="cardList" class="card-list">
+    <div class="empty-state">Loading…</div>
+  </div>
+  <div id="loadMoreWrap" style="text-align:center;padding:18px 0;display:none">
+    <button id="loadMoreBtn" class="filter-btn" style="padding:9px 26px;font-size:0.85rem">Load more</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  let connections = [];
+  let searchQuery = '';
+  let searchDebounce = null;
+  // 'recent'   = cards sorted by latest connect (default)
+  // 'applied'  = cards filtered to jobs you have applied to, sorted by appliedAt desc
+  let cardView = 'recent';
+  // True totals from the server (NOT derived from the paged slice).
+  // Refreshed on initial load + manual refresh. Holds the numbers the
+  // top-strip cards display: totalConnections / withJobMatch / etc.
+  let matchStats = { totalConnections: 0, withJobMatch: 0, distinctMatchingCompanies: 0, distinctTrackedCompanies: 0 };
+  // Pagination — 200 connections per page, "Load more" appends another batch.
+  // Server returns up to 200 sorted by firstSeenAt desc per request.
+  const PAGE_SIZE = 200;
+  let hasMore = false;
+
+  // Build the connections URL with every active filter — search,
+  // hasJobMatch — so the server gives us back ONLY rows that should appear
+  // in the current view. The server scopes rows to the session user. The "Only with job matches" toggle and the search
+  // box used to filter client-side AFTER pagination, which meant each
+  // "Load more" only added rows that survived the filter — confusing &
+  // wrong. Now the filters live on the server and pagination is honest.
+  function connectionsQuery(skip) {
+    // Cards group by matching job, so only fetch connections that match
+    // at least one tracked job. hasJobMatch=1 prunes the noise server-side
+    // (no point shipping 3000+ unmatched connections to the client just
+    // to filter them out).
+    const p = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      skip: String(skip),
+      sort: 'connected-desc',
+      hasJobMatch: '1',
+    });
+    if (searchQuery) p.set('q', searchQuery);
+    return p;
+  }
+
+  async function loadConnections() {
+    const r = await fetch('/api/ext/connections?' + connectionsQuery(0).toString());
+    if (!r.ok) throw new Error('Failed to load connections');
+    connections = await r.json();
+    hasMore = connections.length === PAGE_SIZE;
+  }
+
+  async function loadMoreConnections() {
+    const r = await fetch('/api/ext/connections?' + connectionsQuery(connections.length).toString());
+    if (!r.ok) return 0;
+    const next = await r.json();
+    connections = connections.concat(next);
+    hasMore = next.length === PAGE_SIZE;
+    return next.length;
+  }
+
+  // True totals — fetched separately so the top-strip numbers stay accurate
+  // regardless of how many pages have been loaded.
+  async function loadMatchStats() {
+    try {
+      const r = await fetch('/api/ext/connections/match-stats');
+      if (r.ok) matchStats = await r.json();
+    } catch {}
+  }
+
+  // matchingJobs[] now arrives inline on each connection from the server
+  // (see services/connections/store.js#listConnections with
+  // withMatchedJobs=true). No client-side scan / no jobs preload.
+  function matchingJobsFor(c) { return c.matchingJobs || []; }
+
+  // Build [{ job, connections[], appliedAt }] from the flat list. A
+  // connection that matches N jobs shows up under N cards. The server
+  // attaches appliedAt to each matchingJob entry when you have applied to
+  // that job (see services/connections/store.js listConnections).
+  function groupByJob(rows) {
+    const byLink = new Map();
+    for (const c of rows) {
+      for (const j of (c.matchingJobs || [])) {
+        const key = j.jobLink || `${j.company}::${j.title}`;
+        let card = byLink.get(key);
+        if (!card) {
+          card = {
+            jobLink: j.jobLink, title: j.title, company: j.company,
+            appliedAt: j.appliedAt || null,
+            connections: [],
+          };
+          byLink.set(key, card);
+        }
+        if (j.appliedAt && (!card.appliedAt || j.appliedAt > card.appliedAt)) {
+          card.appliedAt = j.appliedAt;
+        }
+        card.connections.push(c);
+      }
+    }
+    let cards = [...byLink.values()];
+    for (const card of cards) {
+      card.connections.sort((a, b) => (b.connectedOn || '').localeCompare(a.connectedOn || ''));
+    }
+    if (cardView === 'applied') {
+      cards = cards.filter(card => !!card.appliedAt);
+      cards.sort((a, b) => (b.appliedAt || '').localeCompare(a.appliedAt || ''));
+    } else {
+      cards.sort((a, b) => (b.connections[0]?.connectedOn || '').localeCompare(a.connections[0]?.connectedOn || ''));
+    }
+    return cards;
+  }
+
+  // Referral notes, keyed by jobLink. Fetched once per render so the Msg click
+  // stays synchronous — a clipboard write after an await loses the user gesture
+  // in Safari and is unreliable in Chrome.
+  const noteCache = new Map();
+  async function loadNotes(cards) {
+    const want = [...new Set(cards.map(c => c.jobLink).filter(l => l && !noteCache.has(l)))];
+    if (!want.length) return;
+    try {
+      const companies = {};
+      for (const c of cards) if (c.jobLink && c.company) companies[c.jobLink] = c.company;
+      const r = await fetch('/api/connections/notes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobLinks: want, companies }),
+      });
+      const d = await r.json();
+      for (const [link, n] of Object.entries(d.notes || {})) noteCache.set(link, n);
+      for (const l of want) if (!noteCache.has(l)) noteCache.set(l, null);   // don't refetch misses
+    } catch { /* Msg still opens the chat, just without a note */ }
+  }
+
+  const firstName = (full) => String(full || '').trim().split(/\s+/)[0]
+    .replace(/[^\p{L}.'-]/gu, '') || 'there';
+
+  // Copy the note, then open the chat. Both inside the click, in that order.
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-msg]');
+    if (!btn) return;
+    e.preventDefault();
+    const note = noteCache.get(btn.dataset.joblink);
+    const url = btn.dataset.msg;
+
+    const was = btn.textContent;
+    const flash = (label, ok) => {
+      btn.textContent = label;
+      btn.style.borderColor = ok ? 'var(--gold)' : 'var(--brick)';
+      setTimeout(() => { btn.textContent = was; btn.style.borderColor = ''; }, 1800);
+    };
+
+    if (note?.template) {
+      const text = note.template.replace(/\{\{\s*name\s*\}\}/gi, firstName(btn.dataset.name));
+      let copied = false;
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, text.length);        // iOS needs the explicit range
+        copied = document.execCommand('copy');       // synchronous, no permission prompt
+        ta.remove();
+      } catch { /* fall through to the async API */ }
+      if (!copied && navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => flash('Copied ✓', true)).catch(() => flash('Copy failed', false));
+        copied = true;                               // optimistic; the catch corrects it
+      }
+      if (copied) {
+        flash({ job: 'Copied ✓', company: 'Copied (company) ✓', generated: 'Copied (generic) ✓' }[note.origin] || 'Copied ✓', true);
+      } else {
+        flash('Copy failed', false);
+      }
+    } else {
+      // Never silent: an empty clipboard with the chat opening reads as a bug.
+      flash('No note yet', false);
+    }
+    window.open(url, '_blank', 'noopener');
+  });
+
+  function render() {
+    // Headline numbers — TRUE totals from matchStats, NOT derived from the
+    // paged slice. All filters (search / hasJobMatch) live on the server,
+    // so the in-memory `connections` array already reflects exactly what
+    // should be visible.
+    document.getElementById('connStats').innerHTML = `
+      <div class="conn-stats__cell"><span class="conn-stats__val">${matchStats.totalConnections || 0}</span><span class="conn-stats__lab">Connections</span></div>
+      <div class="conn-stats__cell"><span class="conn-stats__val" data-tone="moss">${matchStats.withJobMatch || 0}</span><span class="conn-stats__lab">With job match</span></div>
+      <div class="conn-stats__cell"><span class="conn-stats__val">${matchStats.distinctMatchingCompanies || 0}</span><span class="conn-stats__lab">Matching companies</span></div>
+    `;
+
+    const root = document.getElementById('cardList');
+    const cards = groupByJob(connections);
+    const meta = `${connections.length} conn · ${cards.length} jobs`;
+    document.getElementById('connMeta').textContent = meta;
+
+    if (!cards.length) {
+      root.innerHTML = `<div class="empty-state">${connections.length ? 'No matching jobs in your tracker.' : 'No connections yet. Visit linkedin.com/mynetwork/invite-connect/connections/ with the extension running.'}</div>`;
+      document.getElementById('loadMoreWrap').style.display = hasMore ? '' : 'none';
+      return;
+    }
+
+    document.getElementById('loadMoreWrap').style.display = hasMore ? '' : 'none';
+
+    loadNotes(cards);
+    root.innerHTML = cards.map(card => {
+      const titleHtml = card.jobLink
+        ? `<a class="job-card__title" href="${esc(card.jobLink)}" target="_blank" rel="noopener">${esc(card.title || '(untitled)')}</a>`
+        : `<span class="job-card__title">${esc(card.title || '(untitled)')}</span>`;
+      const countLabel = card.connections.length === 1 ? '1 connect' : `${card.connections.length} connects`;
+      const rows = card.connections.map(c => {
+        const photo = c.photoUrl
+          ? `<div class="conn-photo" style="background-image:url('${esc(c.photoUrl)}')"></div>`
+          : `<div class="conn-photo">${esc((c.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+        const when = c.connectedOnText || (c.connectedOn ? `connected ${new Date(c.connectedOn).toLocaleDateString()}` : '');
+        const profileBtn = c.profileUrl
+          ? `<a class="row-btn row-btn--profile" href="${esc(c.profileUrl)}" target="_blank" rel="noopener">Profile</a>`
+          : '';
+        const msgBtn = c.messageUrl
+          ? `<button class="row-btn row-btn--msg" data-msg="${esc(c.messageUrl)}"
+                data-name="${esc(c.name || '')}" data-joblink="${esc(card.jobLink || '')}"
+                title="Copy a referral note for this role, then open the chat">Msg</button>`
+          : '';
+        return `
+          <div class="conn-row">
+            ${photo}
+            <div class="conn-row__info">
+              <div class="conn-row__name">
+                <a href="${esc(c.profileUrl)}" target="_blank" rel="noopener">${esc(c.name)}</a>
+                ${when ? `<span class="when">${esc(when)}</span>` : ''}
+              </div>
+              ${c.headline ? `<div class="conn-row__headline">${esc(c.headline)}</div>` : ''}
+            </div>
+            <div class="conn-row__actions">${profileBtn}${msgBtn}</div>
+          </div>
+        `;
+      }).join('');
+      return `
+        <div class="job-card">
+          <div class="job-card__head">
+            <div>
+              ${titleHtml}
+              ${card.company ? `<span class="job-card__company">@ ${esc(card.company)}</span>` : ''}
+            </div>
+            <div class="job-card__meta">
+              ${card.appliedAt ? `<span class="pill pill--gold">Applied ${esc(new Date(card.appliedAt).toLocaleDateString())}</span>` : ''}
+              <span class="pill pill--moss">${countLabel}</span>
+            </div>
+          </div>
+          ${rows}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Search + "Only with job matches" both ARE server-side filters now. Each
+  // change reloads from page 0 so pagination stays honest (otherwise
+  // "Load more" would have to ask for a different filtered slice).
+  document.getElementById('connSearch').addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(async () => {
+      await loadConnections();
+      render();
+    }, 250);
+  });
+  document.querySelectorAll('#viewPills .filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cardView = btn.dataset.view;
+      document.querySelectorAll('#viewPills .filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.view === cardView);
+      });
+      render();
+    });
+  });
+  document.getElementById('loadMoreBtn').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    e.target.textContent = 'Loading…';
+    try {
+      await loadMoreConnections();
+      render();
+    } finally {
+      e.target.disabled = false;
+      e.target.textContent = 'Load more';
+    }
+  });
+
+  (async () => {
+    try {
+      // Match stats fetched up front so the top-strip paints with TRUE
+      // totals on first render. Connections list arrives with
+      // matchingJobs[] inline — no separate jobs preload.
+      await Promise.all([loadMatchStats(), loadConnections()]);
+      render();
+    } catch (e) {
+      document.getElementById('cardList').innerHTML = `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
+    }
+  })();
+
+  // Manual refresh — re-pulls match stats and the connections list, then
+  // re-renders. Delegated off document because
+  // the button element is parsed AFTER this IIFE (#refreshBtn sits below
+  // the closing script tag), so a direct getElementById here returns null.
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('#refreshBtn');
+    if (!btn) return;
+    btn.classList.add('spinning');
+    try {
+      await Promise.all([loadMatchStats(), loadConnections()]);
+      render();
+    } finally {
+      btn.classList.remove('spinning');
+    }
+  });
+})();
+</script>
+
+<button class="refresh-btn" id="refreshBtn" title="Refresh connections from mongo">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <path d="M17 10a7 7 0 01-12.9 3.7M3 10a7 7 0 0112.9-3.7M17 10V4m0 6h-6M3 10v6m0-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+</body>
+</html>

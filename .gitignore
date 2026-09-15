@@ -1,0 +1,17 @@
+node_modules
+.env
+logs/
+tmp/
+output/
+*.pdf
+resumeData.json
+!.env.example
+# Design exploration scratch (kept locally only)
+_designs/
+# Rolling-window server log, mirror snapshots, per-owner connection match cache.
+data/
+# Other people's MongoDB connection strings (Settings → Shared job sources).
+# Local to this machine and never stored in the database — keep it that way.
+data/peers.json
+services/connections/.cache/
+.playwright-mcp/

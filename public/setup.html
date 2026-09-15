@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set up · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+  /* Same centered card as login.html — the user isn't authenticated yet, so
+     there is no rail to sit inside. */
+  body { display: grid; place-items: center; padding: 24px; }
+  .auth {
+    width: 100%; max-width: 400px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 26px 24px;
+    box-shadow: 0 20px 60px -24px rgba(0,0,0,0.6);
+  }
+  .auth__brand {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 22px;
+  }
+  .auth__brand-mark {
+    font: 700 20px/1 var(--sans);
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .auth__brand-mark::after {
+    content: ''; display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 3px rgba(126,181,116,0.20);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .auth__title {
+    font: 700 20px/1.2 var(--sans);
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .auth__sub {
+    font: 500 14.5px/1.5 var(--sans);
+    color: var(--ink-3);
+    margin-bottom: 22px;
+  }
+  .auth__field { margin-bottom: 14px; }
+  .auth__field label {
+    display: block;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .auth__field input {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 9px 12px;
+    font: 500 15.5px/1.4 var(--sans);
+    outline: none;
+  }
+  .auth__field input:focus { border-color: var(--gold); }
+  .auth__field small {
+    display: block;
+    font: 500 12px/1.4 var(--sans);
+    color: var(--ink-4);
+    margin-top: 5px;
+  }
+  .auth__submit {
+    width: 100%;
+    background: var(--gold);
+    color: var(--bg);
+    border: 1px solid var(--gold);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font: 600 15px/1 var(--sans);
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 100ms ease;
+  }
+  .auth__submit:hover:not(:disabled) { background: var(--gold-2); }
+  .auth__submit:disabled { opacity: 0.55; cursor: not-allowed; }
+  .auth__error {
+    font: 500 14px/1.4 var(--sans);
+    color: var(--brick);
+    margin-top: 10px;
+    min-height: 18px;
+  }
+  .auth__hint {
+    font: 500 12.5px/1.5 var(--sans);
+    color: var(--ink-4);
+    margin-top: 18px;
+    text-align: center;
+  }
+  .auth__hint a { color: var(--gold); }
+  .auth__hint code {
+    color: var(--gold);
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  /* Shown instead of the form once a user already exists. */
+  .auth__done { display: none; }
+  .auth--done .auth__form { display: none; }
+  .auth--done .auth__done { display: block; }
+</style>
+</head>
+<body class="app--ready">
+
+<div class="auth" id="card">
+  <div class="auth__brand">
+    <span class="auth__brand-mark">Forge</span>
+  </div>
+
+  <div class="auth__form">
+    <div class="auth__title">Create your account</div>
+    <div class="auth__sub">
+      Resume Forge runs for one person per database. This creates that person
+      and signs you in — you paste your resume next.
+    </div>
+
+    <form id="setupForm" autocomplete="on">
+      <div class="auth__field">
+        <label for="username">Name</label>
+        <input id="username" name="username" type="text" required autocomplete="name" autofocus maxlength="80">
+        <small>As it appears on your resume. It is also the key your rows are stored under, so pick it once.</small>
+      </div>
+      <div class="auth__field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="email">
+        <small>Your sign-in handle. Outreach mail is sent from the SMTP account you set up later.</small>
+      </div>
+      <div class="auth__field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required minlength="6" autocomplete="new-password">
+      </div>
+      <div class="auth__field">
+        <label for="confirm">Confirm password</label>
+        <input id="confirm" name="confirm" type="password" required minlength="6" autocomplete="new-password">
+      </div>
+      <button type="submit" class="auth__submit" id="submit">Create account</button>
+      <div class="auth__error" id="error"></div>
+    </form>
+
+    <div class="auth__hint">
+      Prefer the terminal? <code>node scripts/create-user.js --username "Your Name" --email you@example.com</code>
+    </div>
+  </div>
+
+  <div class="auth__done">
+    <div class="auth__title">Already set up</div>
+    <div class="auth__sub">This database has its user. Sign in to continue.</div>
+    <a class="auth__submit" style="display:block;text-align:center;text-decoration:none" href="/login">Go to sign in</a>
+  </div>
+</div>
+
+<script>
+  const card = document.getElementById('card');
+  const form = document.getElementById('setupForm');
+  const submitBtn = document.getElementById('submit');
+  const errEl = document.getElementById('error');
+
+  // A user already exists → nothing to set up; show the sign-in link instead.
+  fetch('/api/setup').then(r => r.json()).then(d => {
+    if (d && d.setupRequired === false) card.classList.add('auth--done');
+  }).catch(() => {});
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.textContent = '';
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm').value;
+    if (password !== confirm) {
+      errEl.textContent = 'Passwords do not match';
+      return;
+    }
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating…';
+    try {
+      const r = await fetch('/api/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password }),
+      });
+      const data = await r.json();
+      if (r.status === 409) {
+        card.classList.add('auth--done');
+        return;
+      }
+      if (!r.ok) {
+        errEl.textContent = data.error || 'Setup failed';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create account';
+        return;
+      }
+      // Signed in by the response cookie. The resume page reads the hint and
+      // explains what to paste where.
+      location.href = '/resume.html?setup=1';
+    } catch (err) {
+      errEl.textContent = err.message;
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create account';
+    }
+  });
+</script>
+</body>
+</html>

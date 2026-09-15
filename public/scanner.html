@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+<style>
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .panel h3 {
+    font: 700 13.5px/1.2 var(--sans);
+    color: var(--gold);
+    margin: 0 0 12px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .panel .hint {
+    font: 500 11px/1.3 var(--mono);
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+
+  /* Importer */
+  .imp-textarea {
+    width: 100%;
+    min-height: 140px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--ink);
+    font: 500 11px/1.4 var(--mono);
+    outline: none;
+    resize: vertical;
+  }
+  .imp-textarea:focus { border-color: var(--gold-line); }
+  .imp-actions {
+    display: flex; gap: 10px; margin-top: 10px;
+    flex-wrap: wrap; align-items: center;
+  }
+  .btn-primary {
+    background: var(--gold-soft);
+    color: var(--gold);
+    border: 1px solid var(--gold-line);
+    padding: 7px 14px; border-radius: 6px;
+    font: 600 12.5px/1 var(--sans);
+    cursor: pointer;
+  }
+  .btn-primary:hover { background: var(--gold-soft); border-color: var(--gold); }
+  .btn-secondary {
+    background: var(--surface-2);
+    color: var(--ink-2);
+    border: 1px solid var(--line);
+    padding: 7px 14px; border-radius: 6px;
+    font: 600 12.5px/1 var(--sans);
+    cursor: pointer;
+  }
+  .btn-secondary:hover { color: var(--ink); border-color: var(--ink-3); }
+  .imp-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .imp-stat {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    padding: 4px 10px; border-radius: 4px;
+    font: 500 12px/1.3 var(--mono);
+  }
+  .imp-stat strong { color: var(--ink); margin-right: 6px; font-weight: 700; }
+  .imp-stat.good   { border-color: var(--moss);  color: var(--moss);  }
+  .imp-stat.good strong { color: var(--moss); }
+  .imp-stat.blocked { border-color: var(--brick); color: var(--brick); }
+  .imp-stat.blocked strong { color: var(--brick); }
+
+  .imp-toolbar {
+    display: flex; gap: 8px; margin-bottom: 12px;
+    flex-wrap: wrap; align-items: center;
+  }
+  .imp-toolbar label {
+    color: var(--ink-2); font: 500 12px/1 var(--sans);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .imp-toolbar input[type=number] {
+    width: 64px; padding: 4px 6px;
+    border: 1px solid var(--line); border-radius: 4px;
+    background: var(--surface-2); color: var(--ink);
+    font: 500 12px/1 var(--mono);
+  }
+  .imp-toolbar .sep {
+    width: 1px; align-self: stretch;
+    background: var(--line); margin: 0 4px;
+  }
+  .imp-spacer { margin-left: auto; font: 500 11px/1.3 var(--mono); color: var(--ink-3); }
+
+  .filter-btn {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    padding: 6px 12px; border-radius: 5px;
+    font: 600 11.5px/1 var(--sans); letter-spacing: 0.02em;
+    cursor: pointer;
+  }
+  .filter-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .filter-btn.active {
+    background: var(--gold-soft);
+    border-color: var(--gold-line);
+    color: var(--gold);
+  }
+  .filter-btn.blocked { border-color: var(--brick); color: var(--brick); }
+  .filter-btn.blocked.active { background: var(--brick-soft); }
+
+  .imp-table-wrap {
+    overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 8px;
+    background: var(--surface-2);
+  }
+  .imp-table { width: 100%; border-collapse: collapse; font: 500 13px/1.4 var(--sans); }
+  .imp-table thead th {
+    text-align: left; padding: 8px 12px;
+    font: 600 10.5px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .imp-table tbody td {
+    padding: 8px 12px; border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+  }
+  .imp-table tbody tr:hover { background: rgba(255,255,255,0.015); }
+  .imp-id-link {
+    color: var(--gold); text-decoration: none;
+    font: 500 12.5px/1 var(--mono);
+  }
+  .imp-id-link:hover { text-decoration: underline; }
+
+  .status-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font: 700 10px/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .status-pill.s-new      { background: var(--moss-soft);  color: var(--moss);  border: 1px solid var(--moss); }
+  .status-pill.s-approved { background: var(--gold-soft);  color: var(--gold);  border: 1px solid var(--gold-line); }
+  .status-pill.s-rejected { background: var(--brick-soft); color: var(--brick); border: 1px solid var(--brick); }
+  .status-pill.s-blocked  { background: var(--surface-3);  color: var(--ink-3); border: 1px solid var(--line); }
+  .status-pill.s-scanned  { background: var(--ember-soft); color: var(--ember); border: 1px solid var(--ember); }
+  .status-pill.s-imported { background: var(--plum-soft);  color: var(--plum);  border: 1px solid var(--plum); }
+
+  .apply-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font: 700 10px/1.2 var(--mono); letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .apply-badge.easy { background: var(--moss-soft); color: var(--moss); border: 1px solid var(--moss); }
+  .apply-badge.ext  { background: var(--surface-3); color: var(--ink-3); border: 1px solid var(--line); }
+
+  .icon-btn {
+    display: inline-block;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    padding: 4px 10px; border-radius: 4px;
+    font: 600 11px/1 var(--mono); letter-spacing: 0.04em;
+    text-decoration: none;
+    margin-right: 6px;
+    cursor: pointer;
+    background: transparent;
+  }
+  .icon-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .icon-btn.open { color: var(--gold); border-color: var(--gold-line); }
+  .icon-btn.open:hover { background: var(--gold-soft); border-color: var(--gold); }
+
+  .imp-empty {
+    padding: 30px 0; text-align: center;
+    color: var(--ink-3); font: 500 13px/1.4 var(--sans);
+  }
+
+  /* Filters */
+  .chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--brick-soft);
+    border: 1px solid var(--brick);
+    color: var(--brick);
+    padding: 4px 10px; border-radius: 4px;
+    font: 600 12px/1.2 var(--sans);
+  }
+  .chip button {
+    background: transparent; border: 0; color: inherit;
+    cursor: pointer; padding: 0 0 0 4px;
+    font: 700 14px/1 var(--sans);
+    opacity: 0.7;
+  }
+  .chip button:hover { opacity: 1; }
+  .chip-empty { color: var(--ink-3); font: 500 12px/1.3 var(--sans); margin-bottom: 12px; }
+  .add-row {
+    display: flex; gap: 8px;
+  }
+  .add-row input {
+    flex: 1;
+    padding: 7px 12px;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--surface-2); color: var(--ink);
+    font: 500 13px/1.3 var(--sans); outline: none;
+  }
+  .add-row input:focus { border-color: var(--gold-line); }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+    gap: 12px; align-items: end;
+    margin-bottom: 10px;
+  }
+  .form-field label {
+    display: block;
+    font: 600 10.5px/1.2 var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .form-field input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--surface-2); color: var(--ink);
+    font: 500 13px/1.3 var(--sans); outline: none;
+  }
+  .form-field input:focus { border-color: var(--gold-line); }
+  .form-note { font: 500 11px/1.5 var(--sans); color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="page-head">
+    <div>
+      <div class="page-head__eyebrow">Direct</div>
+      <h1 class="page-head__title">Scanner</h1>
+      <p class="page-head__lead">Paste a LinkedIn voyager API dump or search-results HTML to extract job IDs in bulk, then open them in tabs so the Job Scanner extension auto-analyzes each one. Manage company / keyword blocklists and auto-reject rules below.</p>
+    </div>
+  </div>
+
+  <!-- AUTO-CAPTURE -->
+  <div class="panel">
+    <h3>Auto-Capture from LinkedIn <span class="hint">arm a 5-min window, then page through a jobs search — the extension grabs each page's HTML <em>and</em> sniffs the search API for job IDs</span></h3>
+    <div class="imp-actions">
+      <button class="btn-primary" id="captureToggleBtn">Start capturing</button>
+      <button class="btn-secondary" id="captureLoadBtn">Load captured</button>
+      <button class="btn-secondary" id="captureClearBtn">Clear captured</button>
+      <span class="imp-spacer" id="captureStatus">Idle.</span>
+    </div>
+    <div class="form-note" style="margin-top:10px;">
+      <strong style="color:var(--ink-2)">Manual:</strong> click <strong style="color:var(--ink-2)">Start capturing</strong>, open your LinkedIn jobs search in a logged-in tab, and click through the result pages — the extension auto-scrolls and ships each page, and also captures the search API response (where the job IDs actually live). <strong style="color:var(--ink-2)">Automatic:</strong> save your search URLs below and hit <strong style="color:var(--ink-2)">Open &amp; capture</strong> — it opens one tab per search and the extension pages through 1–N with the <em>Next</em> button (each page's API response is captured). Either way, finish with <strong style="color:var(--ink-2)">Load captured</strong> — the server extracts the job IDs and fills the table directly (no giant paste, no <strong style="color:var(--ink-2)">Parse</strong> step needed).
+    </div>
+
+    <div style="border-top:1px solid var(--line-soft); margin:16px 0 12px;"></div>
+    <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:10px;">
+      <strong style="color:var(--gold); font:700 12px/1.2 var(--sans);">Saved searches</strong>
+      <span class="hint">store LinkedIn search URLs, then open pages 1–N in tabs (armed capture grabs each)</span>
+    </div>
+    <div id="savedSearchList" style="margin-bottom:12px;"></div>
+    <div class="add-row">
+      <input type="text" id="newSearchLabel" placeholder="Label (e.g. Backend · last 24h)" style="flex:0 0 220px;">
+      <input type="text" id="newSearchUrl" placeholder="Paste a LinkedIn jobs search URL…">
+      <button class="btn-secondary" id="addSearchBtn">Save search</button>
+    </div>
+    <div class="imp-actions" style="margin-top:12px;">
+      <label style="color:var(--ink-2); font:500 12px/1 var(--sans); display:inline-flex; align-items:center; gap:6px;">
+        Max pages<input type="number" id="searchPages" value="10" min="1" max="40" style="width:54px; padding:4px 6px; border:1px solid var(--line); border-radius:4px; background:var(--surface-2); color:var(--ink); font:500 12px/1 var(--mono);">
+      </label>
+      <button class="btn-primary" id="openCaptureBtn">Open &amp; capture</button>
+      <span class="imp-spacer">Arms capture and opens one tab per enabled search; the extension pages through with the Next button up to Max pages, then closes the tab. Then click Load captured.</span>
+    </div>
+  </div>
+
+  <!-- IMPORTER (manual paste). Hidden: the extension's capture flow above
+       fills the same Parsed Jobs table automatically, so the paste box only
+       confused new users. The elements stay in the DOM because the script
+       still wires the Parse/Clear handlers and restores the last paste. -->
+  <div class="panel" hidden>
+    <h3>Import LinkedIn Job IDs <span class="hint">paste a voyager API JSON dump (search results / collections)</span></h3>
+    <textarea id="importerInput" class="imp-textarea" placeholder='Paste the LinkedIn JSON response containing fsd_jobPostingCard:(NUMBER,JOB_DETAILS)…'></textarea>
+    <div class="imp-actions">
+      <button class="btn-primary" id="parseImportBtn">Parse</button>
+      <button class="btn-secondary" id="clearImportBtn">Clear</button>
+    </div>
+  </div>
+
+  <div class="panel" id="importerListCard" style="display:none;">
+    <h3>Parsed Jobs <span class="hint" id="importerHint"></span></h3>
+    <div class="imp-stats" id="importerStats"></div>
+    <div class="imp-toolbar">
+      <button class="filter-btn active" data-import-filter="new">New only</button>
+      <button class="filter-btn" data-import-filter="all">Show all</button>
+      <button class="filter-btn" data-import-filter="known">Already scanned</button>
+      <button class="filter-btn blocked" data-import-filter="blocked">Blocked company</button>
+      <div class="sep"></div>
+      <label>Open next
+        <input type="number" id="batchSize" value="50" min="1" max="200">
+        new jobs in tabs
+      </label>
+      <button class="btn-primary" id="batchOpenBtn">Open batch</button>
+      <button class="btn-secondary" id="copyUrlsBtn" title="Copies URLs from current filter, capped to the 'Open next N' value — space-separated">Copy URLs</button>
+      <span class="imp-spacer">Copy URLs → space-separated, respects current filter and the 'Open next N' cap.</span>
+    </div>
+    <div class="imp-table-wrap">
+      <table class="imp-table">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Job ID</th>
+            <th>Status</th>
+            <th>Title (if scanned)</th>
+            <th>Company</th>
+            <th>Apply</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="importerBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FILTERS — Blocked companies -->
+  <div class="panel">
+    <h3>Blocked Companies <span class="hint">jobs from these companies are auto-skipped (no AI run)</span></h3>
+    <div class="chip-list" id="blocklist"></div>
+    <div class="add-row">
+      <input type="text" id="newBlockCompany" placeholder="Company name (e.g. TCS, Infosys)…">
+      <button class="btn-primary" id="addBlockBtn">Block company</button>
+    </div>
+  </div>
+
+  <!-- FILTERS — Auto-Reject Rules -->
+  <div class="panel">
+    <h3>Auto-Reject Rules <span class="hint">analyzed jobs failing these are marked rejected</span></h3>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Min Experience (years)</label>
+        <input type="number" id="minExp" min="0" placeholder="e.g. 0">
+      </div>
+      <div class="form-field">
+        <label>Max Experience (years)</label>
+        <input type="number" id="maxExp" min="0" placeholder="e.g. 5">
+      </div>
+      <div class="form-field">
+        <label>Min Employees</label>
+        <input type="number" id="minEmp" min="0" placeholder="e.g. 50">
+      </div>
+      <div class="form-field">
+        <label>Max Employees</label>
+        <input type="number" id="maxEmp" min="0" placeholder="e.g. 50000">
+      </div>
+      <button class="btn-primary" id="saveFiltersBtn">Save rules</button>
+    </div>
+    <div class="form-note">Leave any field blank to disable that rule. Experience is parsed from strings like "2-5 years"; employees from "201-500".</div>
+  </div>
+
+  <!-- FILTERS — Blocked Keywords -->
+  <div class="panel">
+    <h3>Blocked Keywords <span class="hint">job title or summary containing these is rejected</span></h3>
+    <div class="chip-list" id="keywordlist"></div>
+    <div class="add-row">
+      <input type="text" id="newKeyword" placeholder="e.g. unpaid, internship, sales">
+      <button class="btn-primary" id="addKeywordBtn">Add keyword</button>
+    </div>
+  </div>
+</div>
+
+<button class="refresh-btn" id="refreshBtn" title="Refresh data from mongo">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <path d="M17 10a7 7 0 01-12.9 3.7M3 10a7 7 0 0112.9-3.7M17 10V4m0 6h-6M3 10v6m0-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+
+<script>
+(() => {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const API = '/api/ext';
+  const IMPORTER_STORAGE_KEY = 'jobScannerImporterRaw';
+  // Compact { ids, meta, closed } from a capture "Load" — small enough to fit localStorage (unlike the raw blob). Mutually exclusive with IMPORTER_STORAGE_KEY.
+  const IMPORTER_PARSED_KEY = 'jobScannerImporterParsed';
+
+  let filters = { blockedCompanies: [], blockedKeywords: [], minExperienceYears: null, maxExperienceYears: null, minEmployees: null, maxEmployees: null };
+  let importedIds = [];
+  let importerMeta = {};
+  let closedIds = new Set();
+  let importFilter = 'new';
+  let knownById = {};
+
+  // ===================================================================
+  // PARSERS — verbatim from the legacy job-scanner dashboard. Three formats,
+  // each with a `matches` guard so we run only the parsers a paste actually
+  // triggers. Don't edit existing entries when LinkedIn ships a new format;
+  // append a new parser.
+  // ===================================================================
+  function parseLinkedInSdui2026(text) {
+    const ids = new Set();
+    const closed = new Set();
+    const meta = {};
+    let m;
+    const idRe = /componentkey="job-card-component-ref-(\d+)"/g;
+    while ((m = idRe.exec(text)) !== null) ids.add(m[1]);
+    try {
+      const doc = new DOMParser().parseFromString(text, 'text/html');
+      const seen = new Set();
+      for (const card of doc.querySelectorAll('[componentkey^="job-card-component-ref-"]')) {
+        const id = card.getAttribute('componentkey').match(/(\d+)$/)?.[1];
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const ps = card.querySelectorAll('p');
+        const titleSpan = ps[0]?.querySelector('span:not([aria-hidden="true"])') || ps[0]?.querySelector('span');
+        const title = (titleSpan?.textContent || ps[0]?.textContent || '').trim();
+        const company = (ps[1]?.textContent || '').trim();
+        const easyApply = /easy apply/i.test(card.textContent || '');
+        if (title || company || easyApply) meta[id] = { title, company, easyApply };
+        if (/no longer accepting/i.test(card.textContent || '')) closed.add(id);
+      }
+    } catch (e) {
+      console.warn('[importer] sdui-2026 DOM enrichment failed:', e);
+    }
+    return { ids, closed, meta };
+  }
+
+  function parseLinkedInClassic(text) {
+    const ids = new Set();
+    const closed = new Set();
+    const meta = {};
+    let m;
+    for (const re of [/data-occludable-job-id=["'](\d+)["']/g, /data-job-id=["'](\d+)["']/g]) {
+      while ((m = re.exec(text)) !== null) ids.add(m[1]);
+    }
+    try {
+      const doc = new DOMParser().parseFromString(text, 'text/html');
+      // `<li data-occludable-job-id>` is the wrapper LinkedIn renders on a full
+      // search-results paste; `[data-job-id]` is the inner `.job-card-container`
+      // div (and is all you get if someone copies a single card). Match both —
+      // on a full paste they share an id, so the second pass just rewrites the
+      // same meta entry.
+      for (const card of doc.querySelectorAll('[data-occludable-job-id], [data-job-id]')) {
+        const id = card.getAttribute('data-occludable-job-id') || card.getAttribute('data-job-id');
+        if (!id) continue;
+        const link = card.querySelector('a[href*="/jobs/view/"][aria-label]');
+        let title = link?.getAttribute('aria-label')?.trim() || '';
+        if (!title) {
+          const strong = card.querySelector('a[href*="/jobs/view/"] strong');
+          title = strong?.textContent?.trim() || '';
+        }
+        const subtitle = card.querySelector('.artdeco-entity-lockup__subtitle');
+        const company = subtitle?.textContent?.trim() || '';
+        const stateEl = card.querySelector('.job-card-container__footer-job-state');
+        const state = stateEl?.textContent?.toLowerCase().trim() || '';
+        if (state.includes('no longer accepting')) closed.add(id);
+        // Easy Apply shows as a "<bug icon> Easy Apply" item in the card footer;
+        // its absence means the listing routes to an external apply page.
+        const footer = card.querySelector('.job-card-list__footer-wrapper, .job-card-container__footer-wrapper');
+        const easyApply = /easy apply/i.test(footer?.textContent || card.textContent || '');
+        if (title || company || easyApply) meta[id] = { title, company, easyApply };
+      }
+    } catch (e) {
+      console.warn('[importer] classic DOM enrichment failed:', e);
+    }
+    return { ids, closed, meta };
+  }
+
+  function parseVoyagerJson(text) {
+    const ids = new Set();
+    const closed = new Set();
+    let m;
+    for (const re of [/fsd_jobPostingCard:\((\d+)/g, /fsd_jobPosting:(\d+)/g]) {
+      while ((m = re.exec(text)) !== null) ids.add(m[1]);
+    }
+    const closedRe = /(no longer accepting applications|NO_LONGER_ACCEPTING_APPLICATIONS|"jobState"\s*:\s*"CLOSED"|"closed"\s*:\s*true)/gi;
+    const idRe = /(?:fsd_jobPostingCard:\(|fsd_jobPosting:)(\d+)/g;
+    const idPositions = [];
+    let im;
+    while ((im = idRe.exec(text)) !== null) idPositions.push({ id: im[1], pos: im.index });
+    if (idPositions.length) {
+      let cm;
+      while ((cm = closedRe.exec(text)) !== null) {
+        let bestId = null, bestDist = Infinity;
+        for (const p of idPositions) {
+          const d = Math.abs(p.pos - cm.index);
+          if (d < bestDist) { bestDist = d; bestId = p.id; }
+        }
+        if (bestId && bestDist < 5000) closed.add(bestId);
+      }
+    }
+    return { ids, closed, meta: {} };
+  }
+
+  // Card chrome that sits among a card's text leaves but is never the employer.
+  const RSC_CHROME = /^(viewed|saved|applied|promoted|easy apply|be an early applicant|actively (hiring|reviewing)|responses managed off linkedin|verified|\s*\u00b7\s*|\d+ (school alumni|connections?|people)|.*\balumni work here\b|.*\bclicked apply\b|over \d+|\d+\+? applicants?|new|hybrid|remote|on-?site|full-?time|part-?time|contract|internship)$/i;
+  const rscUnesc = (v) => String(v)
+    .replace(/\\n/g, ' ').replace(/\\t/g, ' ')
+    .replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+    .replace(/\s+/g, ' ').trim();
+  const rscKey = (v) => String(v).toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Aggregator reposts title as "<Role> at <Employer>" while the subtitle is the
+  // posting account. Both names are real — record both, block on either.
+  const rscTitleEmployer = (title) => {
+    const m = /\s+at\s+([^,|\u2013\u2014-]{2,60})$/i.exec(String(title || ''));
+    const v = m ? m[1].trim() : '';
+    return v && !/^(scale|speed|heart|pace|home|work|last|least|best|most|a |an |the )/i.test(v) ? v : '';
+  };
+
+  // LinkedIn 2026 SDUI/RSC stream (the jobs-search API body the extension
+  // captures). Ids ride in nav actions / job-posting urns; title comes from the
+  // A11yLabel binding, and the card's own text leaves follow that anchor in
+  // render order — employer, then location. Keep in sync with the server copy
+  // in services/scanner/parse-jobs.js.
+  function parseLinkedInRsc2026(text) {
+    const ids = new Set();
+    const closed = new Set();
+    const meta = {};
+    let m;
+    const idRes = [
+      /currentJobId(?:=|%3D)(\d+)/g,                  // card nav action / url
+      /urn:li:[a-zA-Z_]*[jJ]ob[a-zA-Z_]*:\(?(\d+)/g,  // urn:li:fsd_jobPosting:<id> etc.
+      /jobPosting:(\d+)/g,                            // trackingUrn jobPosting:<id>
+      /"jobId":"(\d+)"/g,                             // explicit jobId field
+    ];
+    for (const re of idRes) { while ((m = re.exec(text)) !== null) ids.add(m[1]); }
+
+    // Title + company per job, anchored on the A11yLabel<id> binding.
+    const titleRe = /A11yLabel(\d{8,})"\}\}\},"value":\{"\$case":"stringValue","stringValue":"((?:[^"\\]|\\.)*)"/g;
+    const leafRe = /"children":\["((?:[^"\\]|\\.){2,80})"\]/g;
+    const anchors = [];
+    while ((m = titleRe.exec(text)) !== null) {
+      if (/^Selected,/.test(m[2])) continue;         // skip the "Selected, …" duplicate
+      let title = rscUnesc(m[2]);
+      const verified = /\(Verified job\)$/.test(title);
+      title = title.replace(/\s*\(Verified job\)\s*$/, '').trim();
+      if (title) anchors.push({ id: m[1], at: m.index, title, verified });
+    }
+    for (let i = 0; i < anchors.length; i++) {
+      const { id, at, title, verified } = anchors[i];
+      ids.add(id);
+      if (meta[id]) continue;
+      // Bounded by the next anchor so a card can never read its neighbour's
+      // leaves — that bound is what makes this a structural join, not proximity.
+      const end = i + 1 < anchors.length ? anchors[i + 1].at : Math.min(text.length, at + 40000);
+      const seg = text.slice(at, end);
+      const tk = rscKey(title);
+      let company = '';
+      leafRe.lastIndex = 0;
+      let leaf;
+      while ((leaf = leafRe.exec(seg)) !== null) {
+        const v = rscUnesc(leaf[1]);
+        if (!v || RSC_CHROME.test(v)) continue;
+        const vk = rscKey(v);
+        if (vk && tk && (vk === tk || tk.startsWith(vk) || vk.startsWith(tk))) continue;
+        company = v;
+        break;
+      }
+      const alt = rscTitleEmployer(title);
+      meta[id] = {
+        title, verified,
+        ...(company ? { company } : {}),
+        ...(alt && rscKey(alt) !== rscKey(company) ? { companyAlt: alt } : {}),
+      };
+    }
+    // Closed listings — best-effort proximity match (same approach as voyager).
+    const closedRe = /(no longer accepting applications|NO_LONGER_ACCEPTING_APPLICATIONS|"jobState"\s*:\s*"CLOSED"|ListedStatus_CLOSED)/gi;
+    const idRe = /(?:currentJobId(?:=|%3D)|jobPosting:|"jobId":")(\d+)/g;
+    const positions = []; let im;
+    while ((im = idRe.exec(text)) !== null) positions.push({ id: im[1], pos: im.index });
+    if (positions.length) {
+      let cm;
+      while ((cm = closedRe.exec(text)) !== null) {
+        let bestId = null, bestDist = Infinity;
+        for (const p of positions) { const d = Math.abs(p.pos - cm.index); if (d < bestDist) { bestDist = d; bestId = p.id; } }
+        if (bestId && bestDist < 5000) closed.add(bestId);
+      }
+    }
+    return { ids, closed, meta };
+  }
+
+  const IMPORTER_PARSERS = [
+    { name: 'linkedin-html-sdui-2026', matches: (t) => /componentkey="job-card-component-ref-\d+/.test(t), parse: parseLinkedInSdui2026 },
+    { name: 'linkedin-html-classic',   matches: (t) => /data-occludable-job-id|data-job-id=/.test(t),     parse: parseLinkedInClassic },
+    { name: 'voyager-json-v1',         matches: (t) => /fsd_jobPostingCard:\(\d+|fsd_jobPosting:\d+/.test(t), parse: parseVoyagerJson },
+    { name: 'linkedin-rsc-2026',       matches: (t) => /proto\.sdui\.|\$Sreact\.fragment/.test(t),         parse: parseLinkedInRsc2026 },
+  ];
+
+  function parseLinkedInJobs(text) {
+    const ids = new Set();
+    const closed = new Set();
+    const meta = {};
+    for (const p of IMPORTER_PARSERS) {
+      if (!p.matches(text)) continue;
+      const r = p.parse(text);
+      for (const id of r.ids) ids.add(id);
+      for (const id of r.closed) closed.add(id);
+      for (const [id, m] of Object.entries(r.meta || {})) {
+        if (!meta[id]) meta[id] = { ...m };
+        else meta[id] = { title: meta[id].title || m.title, company: meta[id].company || m.company, companyAlt: meta[id].companyAlt || m.companyAlt, easyApply: meta[id].easyApply || m.easyApply };
+      }
+    }
+    // Last-chance net: any `/jobs/view/<id>` href, regardless of format.
+    let m;
+    const hrefRe = /\/jobs\/view\/(\d+)/g;
+    while ((m = hrefRe.exec(text)) !== null) ids.add(m[1]);
+    return { ids: [...ids], closed, meta };
+  }
+
+  // Tests every name we hold for a card. An aggregator repost carries the
+  // posting account as the subtitle and the real employer inside the title, and
+  // either one may be the blocked name — so both are checked rather than
+  // guessing which is "the" company.
+  function matchedBlockedCompany(...names) {
+    const list = filters.blockedCompanies || [];
+    if (!list.length) return null;
+    for (const name of names) {
+      if (!name) continue;
+      const lc = String(name).toLowerCase();
+      const hit = list.find(b => b && lc.includes(b.toLowerCase()));
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function matchedBlockedKeyword(title) {
+    if (!title) return null;
+    const list = filters.blockedKeywords || [];
+    if (!list.length) return null;
+    const lc = title.toLowerCase();
+    return list.find(k => lc.includes(k.toLowerCase())) || null;
+  }
+
+  // Returns a human-readable reason ("company: TCS" / "keyword: java") or null.
+  function matchedBlockedReason(title, company, companyAlt) {
+    const c = matchedBlockedCompany(company, companyAlt);
+    if (c) return `company: ${c}`;
+    const k = matchedBlockedKeyword(title);
+    if (k) return `keyword: ${k}`;
+    return null;
+  }
+
+  function jobUrl(id) { return `https://www.linkedin.com/jobs/view/${id}/`; }
+
+  // `known` is a /results/by-ids entry: status is the row's rowStatus, else
+  // 'applied' when the user applied, else null; `applied` is the boolean.
+  // Blocked companies arrive as rowStatus 'rejected', not a status of their own.
+  function statusPill(known, blockedBy) {
+    if (blockedBy) return { cls: 's-blocked', label: `BLOCKED (${blockedBy})` };
+    if (!known)    return { cls: 's-new', label: 'NEW' };
+    const s = known.status;
+    if (s === 'applied' || known.applied) return { cls: 's-approved', label: 'APPLIED' };
+    if (s === 'rejected') return { cls: 's-rejected', label: 'REJECTED' };
+    // Pulled from a peer's database (Settings → Peer job sources): the row
+    // carries THEIR verdict until it is re-analyzed against your resume, so
+    // it is labelled by source rather than passed off as your own scan.
+    if (known.importedFrom) return { cls: 's-imported', label: `IMPORTED (${known.importedFrom.label || 'peer'})` };
+    return { cls: 's-scanned', label: `SCANNED (${known.verdict || '?'})` };
+  }
+
+  // ea is tri-state: true = Easy Apply, false = external apply, null = the paste
+  // didn't carry the signal for this id (e.g. an href-only last-chance match).
+  function applyBadge(ea) {
+    if (ea === true)  return '<span class="apply-badge easy">Easy Apply</span>';
+    if (ea === false) return '<span class="apply-badge ext">External</span>';
+    return '<span style="color:var(--ink-3)">—</span>';
+  }
+
+  // Batch-fetch known records for the imported IDs so the "already scanned"
+  // pill is accurate even when the paste contains older jobs. Uses the new
+  // /api/ext/results/by-ids endpoint (mirror-backed, O(N) over the in-process
+  // Map — sub-ms for hundreds of IDs).
+  async function fetchKnownForIds(ids) {
+    if (!ids.length) return {};
+    try {
+      const r = await fetch(`${API}/results/by-ids`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobIds: ids }),
+      });
+      if (!r.ok) return {};
+      const data = await r.json();
+      return data.results || {};
+    } catch { return {}; }
+  }
+
+  function renderImporter() {
+    const card = document.getElementById('importerListCard');
+    const body = document.getElementById('importerBody');
+    const hint = document.getElementById('importerHint');
+    const stats = document.getElementById('importerStats');
+
+    if (!importedIds.length) {
+      card.style.display = 'none';
+      stats.innerHTML = '';
+      return;
+    }
+
+    const enriched = importedIds.map(id => {
+      const m = importerMeta[id] || {};
+      const known = knownById[id] || null;
+      const companyForMatch = (known && known.company) || m.company || '';
+      const altForMatch = m.companyAlt || '';
+      const titleForMatch = (known && known.title) || m.title || '';
+      // Prefer the DB value (set at scan time) over the freshly-parsed one; fall
+      // back to null when neither source knows.
+      const easyApply = (known && typeof known.easyApply === 'boolean') ? known.easyApply
+        : (typeof m.easyApply === 'boolean' ? m.easyApply : null);
+      return {
+        id,
+        url: jobUrl(id),
+        known,
+        parsedTitle: m.title || '',
+        parsedCompany: m.company || '',
+        easyApply,
+        parsedCompanyAlt: altForMatch,
+        blockedBy: matchedBlockedReason(titleForMatch, companyForMatch, altForMatch),
+      };
+    });
+    const blockedOnes = enriched.filter(x => x.blockedBy);
+    const newOnes = enriched.filter(x => !x.known && !x.blockedBy);
+    const knownOnes = enriched.filter(x => x.known && !x.blockedBy);
+    const importedOnes = knownOnes.filter(x => x.known.importedFrom);
+
+    stats.innerHTML = `
+      <div class="imp-stat"><strong>${enriched.length}</strong> parsed</div>
+      <div class="imp-stat good"><strong>${newOnes.length}</strong> new</div>
+      <div class="imp-stat"><strong>${knownOnes.length}</strong> already scanned</div>
+      ${importedOnes.length ? `<div class="imp-stat"><strong>${importedOnes.length}</strong> imported from peers</div>` : ''}
+      ${blockedOnes.length ? `<div class="imp-stat blocked"><strong>${blockedOnes.length}</strong> blocked company</div>` : ''}
+    `;
+
+    card.style.display = '';
+    hint.textContent = `${enriched.length} jobs (${newOnes.length} new, ${knownOnes.length} known${blockedOnes.length ? `, ${blockedOnes.length} blocked` : ''})`;
+
+    let visible = enriched;
+    if (importFilter === 'new') visible = newOnes;
+    else if (importFilter === 'known') visible = knownOnes;
+    else if (importFilter === 'blocked') visible = blockedOnes;
+
+    if (!visible.length) {
+      body.innerHTML = `<tr><td colspan="7"><div class="imp-empty">Nothing matches this filter.</div></td></tr>`;
+      return;
+    }
+
+    body.innerHTML = visible.map((x, i) => {
+      const k = x.known;
+      const title = (k && k.title) || x.parsedTitle;
+      const company = (k && k.company) || x.parsedCompany;
+      const s = statusPill(k, x.blockedBy);
+      const rowStyle = x.blockedBy ? ' style="opacity:0.5"' : '';
+      return `<tr${rowStyle}>
+        <td style="color:var(--ink-3)">${i + 1}</td>
+        <td><a href="${esc(x.url)}" target="_blank" rel="noopener" class="imp-id-link">${esc(x.id)}</a></td>
+        <td><span class="status-pill ${s.cls}">${esc(s.label)}</span></td>
+        <td style="color:var(--ink)">${esc(title || '—')}</td>
+        <td style="color:var(--ink-2)">${esc(company || '—')}${x.parsedCompanyAlt ? `<span style="color:var(--ink-3)"> · via ${esc(x.parsedCompanyAlt)}</span>` : ''}</td>
+        <td>${applyBadge(x.easyApply)}</td>
+        <td><a href="${esc(x.url)}" target="_blank" rel="noopener" class="icon-btn open">Open</a></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Adopt an already-parsed { ids, meta, closed } set straight into the table — no textarea, no client-side DOMParser. Keeps the tab responsive on a 30–40 page walk.
+  async function applyParsed({ ids, meta, closed }) {
+    importedIds = Array.isArray(ids) ? ids : [];
+    importerMeta = meta || {};
+    closedIds = new Set(closed || []);
+    // Resolve "already scanned" / company-for-block before painting so rows don't flash NEW.
+    knownById = await fetchKnownForIds(importedIds);
+    renderImporter();
+  }
+
+  function persistParsed() {
+    try {
+      localStorage.setItem(IMPORTER_PARSED_KEY, JSON.stringify({
+        ids: importedIds, meta: importerMeta, closed: [...closedIds],
+      }));
+      localStorage.removeItem(IMPORTER_STORAGE_KEY);
+    } catch {}
+  }
+
+  async function doParseImport() {
+    const raw = document.getElementById('importerInput').value;
+    if (!raw.trim()) {
+      importedIds = [];
+      importerMeta = {};
+      closedIds = new Set();
+      knownById = {};
+      try { localStorage.removeItem(IMPORTER_STORAGE_KEY); localStorage.removeItem(IMPORTER_PARSED_KEY); } catch {}
+      renderImporter();
+      return;
+    }
+    const parsed = parseLinkedInJobs(raw);
+    importedIds = parsed.ids;
+    importerMeta = parsed.meta || {};
+    closedIds = parsed.closed;
+    // Manual paste becomes the source of truth — drop any compact capture blob.
+    try { localStorage.setItem(IMPORTER_STORAGE_KEY, raw); localStorage.removeItem(IMPORTER_PARSED_KEY); } catch {}
+    // Resolve "already scanned" / company-for-block decision against current
+    // data before painting the table. Without this every row flashes NEW
+    // for a beat even when most are known.
+    knownById = await fetchKnownForIds(importedIds);
+    renderImporter();
+  }
+
+  async function restoreImporter() {
+    try {
+      // Prefer the compact captured set; fall back to a manual raw paste only if there's no compact blob.
+      const compact = localStorage.getItem(IMPORTER_PARSED_KEY);
+      if (compact) {
+        const obj = JSON.parse(compact);
+        if (obj && Array.isArray(obj.ids) && obj.ids.length) {
+          await applyParsed(obj);
+          return;
+        }
+      }
+      const raw = localStorage.getItem(IMPORTER_STORAGE_KEY);
+      if (raw && !document.getElementById('importerInput').value) {
+        document.getElementById('importerInput').value = raw;
+        const parsed = parseLinkedInJobs(raw);
+        importedIds = parsed.ids;
+        importerMeta = parsed.meta || {};
+        closedIds = parsed.closed;
+        knownById = await fetchKnownForIds(importedIds);
+        renderImporter();
+      }
+    } catch {}
+  }
+
+  document.getElementById('parseImportBtn').addEventListener('click', doParseImport);
+  document.getElementById('clearImportBtn').addEventListener('click', () => {
+    document.getElementById('importerInput').value = '';
+    importedIds = [];
+    importerMeta = {};
+    closedIds = new Set();
+    knownById = {};
+    try { localStorage.removeItem(IMPORTER_STORAGE_KEY); localStorage.removeItem(IMPORTER_PARSED_KEY); } catch {}
+    renderImporter();
+  });
+
+  document.querySelectorAll('[data-import-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-import-filter]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      importFilter = btn.dataset.importFilter;
+      renderImporter();
+    });
+  });
+
+  document.getElementById('batchOpenBtn').addEventListener('click', async () => {
+    const n = Math.max(1, Math.min(200, parseInt(document.getElementById('batchSize').value, 10) || 50));
+    const isBlocked = (id) => {
+      const k = knownById[id];
+      const m = importerMeta[id] || {};
+      const company = (k && k.company) || m.company;
+      const title = (k && k.title) || m.title;
+      return matchedBlockedReason(title, company, m.companyAlt);
+    };
+    const eligible = importedIds.filter(id => !knownById[id] && !isBlocked(id));
+    const skippedBlocked = importedIds.filter(id => !knownById[id] && isBlocked(id)).length;
+    const news = eligible.slice(0, n);
+    if (!news.length) {
+      alert(skippedBlocked
+        ? `No new jobs to open. (${skippedBlocked} skipped — company or keyword on the blocklist.)`
+        : 'No new jobs to open.');
+      return;
+    }
+    const btn = document.getElementById('batchOpenBtn');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    let opened = 0, blocked = 0;
+    try {
+      for (let i = 0; i < news.length; i++) {
+        const w = window.open(jobUrl(news[i]), '_blank');
+        if (w) opened++; else blocked++;
+        if (i < news.length - 1) {
+          const delaySec = 1 + Math.random() * 2;
+          for (let remain = Math.ceil(delaySec); remain > 0; remain--) {
+            btn.textContent = `Opened ${i + 1}/${news.length} • next in ${remain}s…`;
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+      }
+      btn.textContent = blocked
+        ? `Done — ${opened} opened, ${blocked} blocked (allow popups for this site)`
+        : `Done — opened ${opened}`;
+    } finally {
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+    }
+  });
+
+  document.getElementById('copyUrlsBtn').addEventListener('click', async () => {
+    // Same scoping the old dashboard used: respects the current filter pill +
+    // the "Open next N" cap, so Copy URLs ↔ Open batch always agree on the
+    // exact set of jobs about to be acted on.
+    const n = Math.max(1, Math.min(200, parseInt(document.getElementById('batchSize').value, 10) || 50));
+    const isBlocked = (id) => {
+      const k = knownById[id];
+      const m = importerMeta[id] || {};
+      const company = (k && k.company) || m.company;
+      const title = (k && k.title) || m.title;
+      return matchedBlockedReason(title, company, m.companyAlt);
+    };
+    let candidates;
+    if (importFilter === 'new')     candidates = importedIds.filter(id => !knownById[id] && !isBlocked(id));
+    else if (importFilter === 'known')   candidates = importedIds.filter(id => knownById[id] && !isBlocked(id));
+    else if (importFilter === 'blocked') candidates = importedIds.filter(id => isBlocked(id));
+    else                                  candidates = importedIds.slice();
+    const urls = candidates.slice(0, n).map(jobUrl);
+    const btn = document.getElementById('copyUrlsBtn');
+    const orig = btn.textContent;
+    if (!urls.length) { btn.textContent = 'No URLs in view'; setTimeout(() => { btn.textContent = orig; }, 1800); return; }
+    try {
+      await navigator.clipboard.writeText(urls.join(' '));
+      btn.textContent = `Copied ${urls.length} URL${urls.length === 1 ? '' : 's'} ✓`;
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = urls.join(' ');
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      btn.textContent = `Copied ${urls.length} URL${urls.length === 1 ? '' : 's'} ✓`;
+    }
+    setTimeout(() => { btn.textContent = orig; }, 1800);
+  });
+
+  // ============================================================
+  // FILTERS
+  // ============================================================
+  async function loadFilters() {
+    const r = await fetch(`${API}/filters`);
+    if (!r.ok) return;
+    filters = await r.json();
+    renderBlocklist();
+    renderKeywordlist();
+    document.getElementById('minExp').value = filters.minExperienceYears ?? '';
+    document.getElementById('maxExp').value = filters.maxExperienceYears ?? '';
+    document.getElementById('minEmp').value = filters.minEmployees ?? '';
+    document.getElementById('maxEmp').value = filters.maxEmployees ?? '';
+    // Block list affects how rows render (BLOCKED pill colour) — repaint.
+    renderImporter();
+  }
+
+  function renderBlocklist() {
+    const el = document.getElementById('blocklist');
+    if (!filters.blockedCompanies?.length) { el.innerHTML = '<div class="chip-empty">No blocked companies yet.</div>'; return; }
+    el.innerHTML = filters.blockedCompanies.map(c => `
+      <span class="chip">${esc(c)}<button data-action="unblock-company" data-name="${esc(c)}">×</button></span>
+    `).join('');
+  }
+
+  function renderKeywordlist() {
+    const el = document.getElementById('keywordlist');
+    if (!filters.blockedKeywords?.length) { el.innerHTML = '<div class="chip-empty">No blocked keywords yet.</div>'; return; }
+    el.innerHTML = filters.blockedKeywords.map(k => `
+      <span class="chip">${esc(k)}<button data-action="remove-keyword" data-name="${esc(k)}">×</button></span>
+    `).join('');
+  }
+
+  async function saveFiltersPut() {
+    const r = await fetch(`${API}/filters`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(filters),
+    });
+    if (r.ok) filters = await r.json();
+  }
+
+  document.getElementById('addBlockBtn').addEventListener('click', async () => {
+    const input = document.getElementById('newBlockCompany');
+    const name = input.value.trim();
+    if (!name) return;
+    const r = await fetch(`${API}/filters/block-company`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: name }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      filters = data.filters || filters;
+      input.value = '';
+      renderBlocklist();
+      renderImporter();
+    }
+  });
+  document.getElementById('newBlockCompany').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('addBlockBtn').click();
+  });
+
+  document.getElementById('addKeywordBtn').addEventListener('click', async () => {
+    const input = document.getElementById('newKeyword');
+    const kw = input.value.trim();
+    if (!kw) return;
+    filters.blockedKeywords = [...(filters.blockedKeywords || []), kw];
+    await saveFiltersPut();
+    renderKeywordlist();
+    input.value = '';
+  });
+  document.getElementById('newKeyword').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('addKeywordBtn').click();
+  });
+
+  document.getElementById('saveFiltersBtn').addEventListener('click', async () => {
+    const num = (id) => {
+      const v = document.getElementById(id).value;
+      return v === '' ? null : Number(v);
+    };
+    filters.minExperienceYears = num('minExp');
+    filters.maxExperienceYears = num('maxExp');
+    filters.minEmployees = num('minEmp');
+    filters.maxEmployees = num('maxEmp');
+    await saveFiltersPut();
+    const btn = document.getElementById('saveFiltersBtn');
+    const orig = btn.textContent;
+    btn.textContent = 'Saved ✓';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+
+  // Delegated handlers for dynamically rendered chips and the bottom-right
+  // refresh button (which sits outside this IIFE in the DOM).
+  document.addEventListener('click', async (e) => {
+    const refresh = e.target.closest('#refreshBtn');
+    if (refresh) {
+      refresh.classList.add('spinning');
+      try {
+        await loadFilters();
+        if (importedIds.length) {
+          knownById = await fetchKnownForIds(importedIds);
+          renderImporter();
+        }
+      } finally { refresh.classList.remove('spinning'); }
+      return;
+    }
+    const unblock = e.target.closest('[data-action="unblock-company"]');
+    if (unblock) {
+      const name = unblock.dataset.name;
+      const r = await fetch(`${API}/filters/block-company/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (r.ok) {
+        const data = await r.json();
+        filters = data.filters || filters;
+        renderBlocklist();
+        renderImporter();
+      }
+      return;
+    }
+    const removeKw = e.target.closest('[data-action="remove-keyword"]');
+    if (removeKw) {
+      const kw = removeKw.dataset.name;
+      filters.blockedKeywords = (filters.blockedKeywords || []).filter(k => k !== kw);
+      await saveFiltersPut();
+      renderKeywordlist();
+      return;
+    }
+  });
+
+  // ============================================================
+  // AUTO-CAPTURE (armed window → extension ships LinkedIn search HTML here)
+  // ============================================================
+  const CAPTURE_API = `${API}/scan-capture`;
+  let capturePollTimer = null;
+
+  const fmtRemaining = (ms) => {
+    const s = Math.max(0, Math.round(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  function renderCaptureStatus(st) {
+    const btn = document.getElementById('captureToggleBtn');
+    const statusEl = document.getElementById('captureStatus');
+    // Two capture sources feed the buffer: 'page' = scraped search HTML
+    // (title/company, no job ids), 'api' = sniffed search-API bodies (the ids).
+    const pageCount = st.pageCount != null ? st.pageCount : st.chunkCount || 0;
+    const apiCount = st.apiCount || 0;
+    const parts = [];
+    if (pageCount) parts.push(`${pageCount} page${pageCount === 1 ? '' : 's'}`);
+    if (apiCount) parts.push(`${apiCount} API`);
+    const captured = parts.length ? ` · ${parts.join(' + ')} captured` : '';
+    // Surface a full/dropped buffer so capture stopping is never silent again.
+    const warn = st.dropped ? ` ⚠ buffer full — dropped ${st.dropped} (Load → Parse → Clear, then re-run)` : '';
+    if (st.armed) {
+      btn.textContent = 'Stop capturing';
+      btn.classList.add('btn-secondary');
+      btn.classList.remove('btn-primary');
+      statusEl.textContent = `Capturing… ${fmtRemaining(st.remainingMs)} left${captured}${warn}`;
+      statusEl.style.color = st.dropped ? 'var(--brick)' : 'var(--moss)';
+    } else {
+      btn.textContent = 'Start capturing';
+      btn.classList.add('btn-primary');
+      btn.classList.remove('btn-secondary');
+      statusEl.textContent = (captured ? `Idle${captured}.` : 'Idle.') + warn;
+      statusEl.style.color = st.dropped ? 'var(--brick)' : '';
+    }
+  }
+
+  async function refreshCaptureStatus() {
+    try {
+      const r = await fetch(`${CAPTURE_API}/status`);
+      if (!r.ok) return null;
+      const st = await r.json();
+      renderCaptureStatus(st);
+      // Stop polling once the window expires / is disarmed.
+      if (!st.armed && capturePollTimer) {
+        clearInterval(capturePollTimer);
+        capturePollTimer = null;
+      }
+      return st;
+    } catch { return null; }
+  }
+
+  function startCapturePolling() {
+    if (capturePollTimer) return;
+    capturePollTimer = setInterval(refreshCaptureStatus, 3000);
+  }
+
+  document.getElementById('captureToggleBtn').addEventListener('click', async (e) => {
+    const armed = e.target.textContent.startsWith('Stop');
+    const r = await fetch(`${CAPTURE_API}/${armed ? 'disarm' : 'arm'}`, { method: 'POST' });
+    if (!r.ok) return;
+    const st = await r.json();
+    renderCaptureStatus(st);
+    if (st.armed) startCapturePolling();
+  });
+
+  document.getElementById('captureLoadBtn').addEventListener('click', async (e) => {
+    const btn = e.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Loading…';
+    btn.disabled = true;
+    // Server-side parse: backend ships back only the compact { ids, meta, closed }, never the raw blob — table fills directly, no frozen tab.
+    let data;
+    try {
+      const r = await fetch(`${CAPTURE_API}/parsed`);
+      if (!r.ok) throw new Error('bad status');
+      data = await r.json();
+    } catch {
+      btn.disabled = false;
+      btn.textContent = 'Load failed';
+      setTimeout(() => { btn.textContent = orig; }, 1800);
+      return;
+    }
+    btn.disabled = false;
+    if (!data.ids || !data.ids.length) {
+      btn.textContent = 'Nothing captured';
+      setTimeout(() => { btn.textContent = orig; }, 1800);
+      return;
+    }
+    await applyParsed(data);
+    persistParsed();
+    document.getElementById('importerListCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const c = data.counts || {};
+    const srcParts = [];
+    if (c.pages) srcParts.push(`${c.pages} page${c.pages === 1 ? '' : 's'}`);
+    if (c.api) srcParts.push(`${c.api} API`);
+    const src = srcParts.length ? ` from ${srcParts.join(' + ')}` : '';
+    btn.textContent = `Loaded ${data.ids.length} jobs${src} ✓`;
+    setTimeout(() => { btn.textContent = orig; }, 2800);
+  });
+
+  document.getElementById('captureClearBtn').addEventListener('click', async (e) => {
+    const btn = e.target;
+    const orig = btn.textContent;
+    const r = await fetch(CAPTURE_API, { method: 'DELETE' });
+    if (r.ok) { btn.textContent = 'Cleared ✓'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+    await refreshCaptureStatus();
+  });
+
+  // ----- Saved searches + Open & capture -----
+  let savedSearches = [];
+
+  const newSearchId = () => {
+    try { return crypto.randomUUID(); }
+    catch { return `s-${Date.now()}-${Math.floor(Math.random() * 1e6)}`; }
+  };
+
+  // Page N of a LinkedIn search = the same URL with start=(N-1)*25; drop
+  // currentJobId so it doesn't pin the right pane to a page-1 job.
+  function buildPageUrl(base, page) {
+    try {
+      const u = new URL(base);
+      u.searchParams.set('start', (page - 1) * 25);
+      u.searchParams.delete('currentJobId');
+      return u.toString();
+    } catch { return null; }
+  }
+
+  function renderSearches() {
+    const el = document.getElementById('savedSearchList');
+    if (!savedSearches.length) {
+      el.innerHTML = '<div class="chip-empty">No saved searches yet — paste a LinkedIn jobs search URL below.</div>';
+      return;
+    }
+    el.innerHTML = savedSearches.map(s => `
+      <div style="display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--line-soft);">
+        <input type="checkbox" data-action="toggle-search" data-id="${esc(s.id)}" ${s.enabled !== false ? 'checked' : ''} title="Include in Open & capture">
+        <span style="color:var(--ink); font:600 12.5px/1.2 var(--sans); flex:0 0 200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(s.label || '(no label)')}</span>
+        <a href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(s.url)}" style="color:var(--ink-3); font:500 11px/1.3 var(--mono); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:none;">${esc(s.url)}</a>
+        <button class="icon-btn" data-action="delete-search" data-id="${esc(s.id)}" title="Delete">Delete</button>
+      </div>
+    `).join('');
+  }
+
+  async function loadSearches() {
+    try {
+      const r = await fetch(`${API}/searches`);
+      if (!r.ok) return;
+      savedSearches = await r.json();
+      renderSearches();
+    } catch {}
+  }
+
+  async function saveSearches() {
+    const r = await fetch(`${API}/searches`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ searches: savedSearches }),
+    });
+    if (r.ok) { savedSearches = await r.json(); renderSearches(); }
+  }
+
+  document.getElementById('addSearchBtn').addEventListener('click', async () => {
+    const labelEl = document.getElementById('newSearchLabel');
+    const urlEl = document.getElementById('newSearchUrl');
+    const url = urlEl.value.trim();
+    if (!url) { urlEl.focus(); return; }
+    try { new URL(url); } catch { urlEl.style.borderColor = 'var(--brick)'; setTimeout(() => { urlEl.style.borderColor = ''; }, 1500); return; }
+    savedSearches.push({ id: newSearchId(), label: labelEl.value.trim(), url, enabled: true });
+    labelEl.value = ''; urlEl.value = '';
+    await saveSearches();
+  });
+  document.getElementById('newSearchUrl').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('addSearchBtn').click();
+  });
+
+  document.getElementById('savedSearchList').addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-action="delete-search"]');
+    if (del) {
+      savedSearches = savedSearches.filter(s => s.id !== del.dataset.id);
+      await saveSearches();
+    }
+  });
+  document.getElementById('savedSearchList').addEventListener('change', async (e) => {
+    const tog = e.target.closest('[data-action="toggle-search"]');
+    if (tog) {
+      const s = savedSearches.find(x => x.id === tog.dataset.id);
+      if (s) { s.enabled = tog.checked; await saveSearches(); }
+    }
+  });
+
+  document.getElementById('openCaptureBtn').addEventListener('click', async (e) => {
+    const enabled = savedSearches.filter(s => s.enabled !== false);
+    if (!enabled.length) { alert('Add and enable at least one saved search first.'); return; }
+    // Walk mode: open ONE tab per search at page 1; the extension pages through
+    // via the bottom-bar Next button (an SPA nav the interceptor captures) up to
+    // `pages`, then closes the tab. Cold-loading N tabs instead races the
+    // extension's injection and loses the page-1 fetch.
+    const pages = Math.max(1, Math.min(40, parseInt(document.getElementById('searchPages').value, 10) || 10));
+    const urls = [];
+    for (const s of enabled) { const u = buildPageUrl(s.url, 1); if (u) urls.push(u); }
+    if (!urls.length) { alert('No valid URLs to open.'); return; }
+    // Arm in walk mode. Fire-and-forget so the user gesture stays live for the
+    // first window.open (browsers block popups opened after an await).
+    fetch(`${CAPTURE_API}/arm`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walk: true, pages, autoClose: false }),
+    }).then(() => refreshCaptureStatus());
+    startCapturePolling();
+
+    const btn = e.target;
+    const orig = btn.textContent;
+    btn.disabled = true;
+    let opened = 0, blocked = 0;
+    try {
+      for (let i = 0; i < urls.length; i++) {
+        const w = window.open(urls[i], '_blank');
+        if (w) opened++; else blocked++;
+        if (i < urls.length - 1) {
+          // 2–3s random gap between tab opens (not instant) so the run looks
+          // less automated / doesn't hammer LinkedIn.
+          const delaySec = 2 + Math.random();
+          for (let remain = Math.ceil(delaySec); remain > 0; remain--) {
+            btn.textContent = `Opened ${i + 1}/${urls.length} • next in ${remain}s…`;
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+      }
+      btn.textContent = blocked
+        ? `Opened ${opened}, ${blocked} blocked — allow popups for this site`
+        : `Opened ${opened} tab(s) — paging up to ${pages}…`;
+    } finally {
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3500);
+    }
+  });
+
+  // ============================================================
+  // INIT
+  // ============================================================
+  (async () => {
+    await loadFilters();
+    await restoreImporter();
+    await loadSearches();
+    // If the page was reloaded mid-window, render + resume the live countdown.
+    const st0 = await refreshCaptureStatus();
+    if (st0?.armed) startCapturePolling();
+  })();
+})();
+</script>
+</body>
+</html>

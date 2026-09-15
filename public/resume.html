@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resume · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+<style>
+  .resume { display: grid; gap: 18px; max-width: 980px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-lg);
+    padding: 20px 22px;
+  }
+  .panel__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; gap: 10px; }
+  .panel__title { font: 700 16.5px/1.2 var(--sans); color: var(--ink); }
+  .panel__sub { font: 500 14px/1.5 var(--sans); color: var(--ink-3); margin-bottom: 16px; }
+  .panel__chip {
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .panel__chip[data-source="feed"]   { color: var(--moss); border-color: var(--moss); }
+  .panel__chip[data-source="tailor"] { color: var(--gold); border-color: var(--gold-line); }
+
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font: 500 15px/1.4 var(--sans);
+    outline: none;
+  }
+  .field textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--gold); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .btn {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font: 600 14px/1 var(--sans);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .btn--primary { background: var(--gold); border-color: var(--gold); color: var(--bg); }
+  .btn--primary:hover { background: var(--gold-2); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .status {
+    font: 600 12.5px/1.2 var(--mono);
+    color: var(--ink-3);
+    margin-left: 6px;
+  }
+  .status[data-tone="ok"]   { color: var(--moss); }
+  .status[data-tone="err"]  { color: var(--brick); }
+  .status[data-tone="warn"] { color: var(--ember); }
+
+  .pdf-row {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .pdf-name { font: 600 14px/1 var(--mono); color: var(--gold); }
+  .pdf-meta { font: 500 13px/1 var(--sans); color: var(--ink-3); }
+
+  .json-box {
+    width: 100%;
+    min-height: 320px;
+    background: var(--bg-paper);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 12px;
+    font: 500 13px/1.55 var(--mono);
+    outline: none;
+    resize: vertical;
+  }
+  .json-box:focus { border-color: var(--gold); }
+
+  .history-row {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-top: 10px;
+    font: 500 13px/1.5 var(--sans);
+    color: var(--ink-3);
+  }
+  .history-row select {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font: 500 13px/1.4 var(--mono);
+    outline: none;
+  }
+
+  .errors-block {
+    margin-top: 10px;
+    background: rgba(196,122,120,0.06);
+    border: 1px solid rgba(196,122,120,0.4);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font: 500 13px/1.5 var(--mono);
+    color: var(--brick);
+  }
+  .errors-block ul { margin: 4px 0 0 18px; }
+  .warns-block {
+    margin-top: 10px;
+    background: rgba(196,161,106,0.06);
+    border: 1px solid rgba(196,161,106,0.4);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font: 500 13px/1.5 var(--mono);
+    color: var(--ember);
+  }
+  .warns-block ul { margin: 4px 0 0 18px; }
+
+  .variant {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .variant + .variant { margin-top: 8px; }
+  .variant__title { font: 600 14.5px/1.3 var(--sans); color: var(--ink); }
+  .variant__meta { font: 500 12px/1.4 var(--mono); color: var(--ink-3); margin-top: 2px; }
+
+  .empty { color: var(--ink-3); font: 500 14px/1.5 var(--sans); margin: 0; }
+
+  /* Schema helpers — "Show example" + "Copy AI prompt" per editor */
+  .tools-row {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .tools-row .btn { font-size: 12.5px; padding: 6px 12px; }
+  .tools-row .hint {
+    font: 500 12px/1.3 var(--sans);
+    color: var(--ink-3);
+    margin-left: auto;
+  }
+  .example-block {
+    display: none;
+    margin-bottom: 10px;
+    background: var(--bg-paper);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+  }
+  .example-block.open { display: block; }
+  .example-block pre {
+    margin: 0;
+    font: 500 12.5px/1.6 var(--mono);
+    color: var(--ink-2);
+    white-space: pre;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="page-head">
+    <div>
+      <div class="page-head__eyebrow">Source of truth</div>
+      <h1 class="page-head__title">Resume</h1>
+      <p class="page-head__lead" id="lead">Loading…</p>
+    </div>
+  </div>
+
+  <div class="resume">
+
+    <!-- PDF -->
+    <div class="panel">
+      <div class="panel__head"><div class="panel__title">Resume PDF</div></div>
+      <div class="panel__sub">Master PDF used by outreach emails as the attachment. Replace by uploading a new file (max 5 MB).</div>
+      <div id="pdfBlock"><p class="empty">Loading…</p></div>
+      <input type="file" id="pdfFile" accept="application/pdf" style="display:none">
+      <div class="actions">
+        <button class="btn btn--primary" id="pdfPickBtn" disabled>Upload PDF</button>
+        <span class="status" id="pdfStatus"></span>
+      </div>
+    </div>
+
+    <!-- Shared scalars -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Common fields</div>
+        <span class="panel__chip">Writes to both</span>
+      </div>
+      <div class="panel__sub">Identity fields shared by both JSONs. Saving here updates <code>data.personalInfo.*</code> AND <code>feedData.personalInfo.*</code> in one shot.</div>
+      <div class="grid-2">
+        <div class="field"><label>Name</label><input data-scalar="name"></div>
+        <div class="field"><label>Email</label><input data-scalar="email"></div>
+        <div class="field"><label>Phone</label><input data-scalar="phone"></div>
+        <div class="field"><label>Location</label><input data-scalar="location"></div>
+        <div class="field"><label>LinkedIn</label><input data-scalar="linkedin"></div>
+        <div class="field"><label>GitHub</label><input data-scalar="github"></div>
+        <div class="field"><label>Portfolio</label><input data-scalar="portfolio"></div>
+        <div class="field"><label>LeetCode</label><input data-scalar="leetcode"></div>
+        <div class="field"><label>Current CTC</label><input data-scalar="currentCTC"></div>
+        <div class="field"><label>Expected CTC</label><input data-scalar="expectedCTC"></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn--primary" id="sharedSave" disabled>Save common fields</button>
+        <span class="status" id="sharedStatus"></span>
+      </div>
+    </div>
+
+    <!-- Tailor JSON -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Tailor JSON <span style="color:var(--ink-3);font-weight:400">— drives Generate / PDF</span></div>
+        <span class="panel__chip" data-source="tailor">data</span>
+      </div>
+      <div class="panel__sub">
+        Deep resume schema (personalInfo, experience[], projects[], education[], skills, meta).
+        Edit elsewhere (an AI assistant works well), then paste the whole document here.
+        Saving validates the structure and archives the previous version into a 5-deep history ring.
+      </div>
+      <div class="tools-row">
+        <button class="btn" type="button" data-example-toggle="tailor">Show example</button>
+        <button class="btn" type="button" data-prompt-copy="tailor">Copy AI prompt</button>
+        <span class="hint">Paste a free-text resume into any AI with the prompt; paste the JSON it returns below.</span>
+      </div>
+      <div class="example-block" id="tailorExample" data-source="tailor"><pre></pre></div>
+      <textarea id="tailorJson" class="json-box" spellcheck="false" placeholder="Paste valid tailor-shaped JSON here…"></textarea>
+      <div class="actions">
+        <button class="btn" id="tailorValidate" disabled>Validate</button>
+        <button class="btn btn--primary" id="tailorSave" disabled>Save tailor JSON</button>
+        <button class="btn" id="tailorReset" disabled>Reset to current</button>
+        <span class="status" id="tailorStatus"></span>
+      </div>
+      <div id="tailorIssues"></div>
+      <div class="history-row">
+        <span>History:</span>
+        <select id="tailorHistorySel"><option value="">—</option></select>
+        <button class="btn" id="tailorRestore" disabled>Restore</button>
+      </div>
+    </div>
+
+    <!-- Feed JSON -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Feed JSON <span style="color:var(--ink-3);font-weight:400">— drives Feed scoring + outreach</span></div>
+        <span class="panel__chip" data-source="feed">feedData</span>
+      </div>
+      <div class="panel__sub">
+        Slim schema: personalInfo, experienceStart, stack, summary, <code>skills</code> as <code>{ name: [aliases] }</code>, cannotClaim, projects.
+        Edits here are independent of the tailor JSON.
+      </div>
+      <div class="tools-row">
+        <button class="btn" type="button" data-example-toggle="feed">Show example</button>
+        <button class="btn" type="button" data-prompt-copy="feed">Copy AI prompt</button>
+        <span class="hint">Especially the <code>cannotClaim</code> list — drives every outreach email.</span>
+      </div>
+      <div class="example-block" id="feedExample" data-source="feed"><pre></pre></div>
+      <textarea id="feedJson" class="json-box" spellcheck="false" placeholder="Paste valid feed-shaped JSON here…"></textarea>
+      <div class="actions">
+        <button class="btn" id="feedValidate" disabled>Validate</button>
+        <button class="btn btn--primary" id="feedSave" disabled>Save feed JSON</button>
+        <button class="btn" id="feedReset" disabled>Reset to current</button>
+        <span class="status" id="feedStatus"></span>
+      </div>
+      <div id="feedIssues"></div>
+      <div class="history-row">
+        <span>History:</span>
+        <select id="feedHistorySel"><option value="">—</option></select>
+        <button class="btn" id="feedRestore" disabled>Restore</button>
+      </div>
+    </div>
+
+    <!-- Tailored variants -->
+    <div class="panel">
+      <div class="panel__head">
+        <div class="panel__title">Tailored variants <span id="variantsCount" style="color:var(--ink-3);font-weight:400"></span></div>
+      </div>
+      <div class="panel__sub">Each Tailor run appends a variant here. Newest first.</div>
+      <div id="variantsBlock"><p class="empty">Loading…</p></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  let currentUser = '';
+  let tailorJson  = null;
+  let feedJson    = null;
+  let history     = { tailor: [], feed: [] };
+  let pdfMeta     = null;
+
+  const setStatus = (id, text, tone = '') => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.tone = tone;
+    if (tone === 'ok') setTimeout(() => { el.textContent = ''; el.dataset.tone = ''; }, 4500);
+  };
+
+  function setEnabled(enabled) {
+    const ids = [
+      'pdfPickBtn',
+      'sharedSave',
+      'tailorValidate', 'tailorSave', 'tailorReset', 'tailorRestore',
+      'feedValidate',   'feedSave',   'feedReset',   'feedRestore',
+    ];
+    ids.forEach(id => { const el = $(id); if (el) el.disabled = !enabled; });
+  }
+
+  // The page edits the logged-in user's resume; the server resolves every
+  // /api/resume* call from the session, so the name is display-only.
+  async function loadMe() {
+    try {
+      const r = await fetch('/api/me');
+      if (r.ok) currentUser = (await r.json())?.user?.username || '';
+    } catch { currentUser = ''; }
+  }
+
+  async function loadAll() {
+    $('lead').textContent = currentUser ? `Editing ${currentUser}'s resume` : 'Editing your resume';
+    setEnabled(false);
+    try {
+      const [resumeRes, variantsRes] = await Promise.all([
+        fetch('/api/resume'),
+        fetch('/feed/api/resume/variants?limit=50'),
+      ]);
+      if (resumeRes.ok) {
+        const d = await resumeRes.json();
+        tailorJson = d.tailor || null;
+        feedJson   = d.feed   || null;
+        history    = d.history || { tailor: [], feed: [] };
+        pdfMeta    = d.pdf || null;
+        // Populate shared scalar inputs
+        const shared = d.shared || {};
+        document.querySelectorAll('input[data-scalar]').forEach(inp => {
+          inp.value = shared[inp.dataset.scalar] ?? '';
+        });
+      } else if (resumeRes.status === 404) {
+        tailorJson = null; feedJson = null; history = { tailor: [], feed: [] }; pdfMeta = null;
+      } else {
+        const err = await resumeRes.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resumeRes.status}`);
+      }
+      const variants = variantsRes.ok ? (await variantsRes.json()).variants || [] : [];
+      renderPdf();
+      renderTailorJson();
+      renderFeedJson();
+      renderHistory();
+      renderVariants(variants);
+      setEnabled(true);
+    } catch (e) {
+      $('lead').textContent = `Failed to load: ${e.message}`;
+    }
+  }
+
+  function renderPdf() {
+    if (pdfMeta) {
+      const sizeKB = (pdfMeta.size / 1024).toFixed(1);
+      const updated = pdfMeta.updatedAt ? new Date(pdfMeta.updatedAt).toLocaleString() : '';
+      $('pdfBlock').innerHTML = `
+        <div class="pdf-row">
+          <span class="pdf-name">${esc(pdfMeta.filename)}</span>
+          <span class="pdf-meta">${sizeKB} KB${updated ? ' · updated ' + esc(updated) : ''}</span>
+          <a class="btn" href="/feed/api/resume/pdf" target="_blank">Download</a>
+        </div>`;
+      $('pdfPickBtn').textContent = 'Replace PDF';
+    } else {
+      $('pdfBlock').innerHTML = `<p class="empty">No PDF on file yet.</p>`;
+      $('pdfPickBtn').textContent = 'Upload PDF';
+    }
+  }
+
+  function renderTailorJson() { $('tailorJson').value = tailorJson ? JSON.stringify(tailorJson, null, 2) : ''; clearIssues('tailorIssues'); }
+  function renderFeedJson()   { $('feedJson').value   = feedJson   ? JSON.stringify(feedJson,   null, 2) : ''; clearIssues('feedIssues'); }
+
+  function renderHistory() {
+    const fmt = (arr) => {
+      if (!arr.length) return '<option value="">(no history yet)</option>';
+      return '<option value="">— pick a backup —</option>' +
+        arr.map(h => `<option value="${h.index}">#${h.index + 1} · ${new Date(h.savedAt).toLocaleString()}</option>`).join('');
+    };
+    $('tailorHistorySel').innerHTML = fmt(history.tailor);
+    $('feedHistorySel').innerHTML   = fmt(history.feed);
+  }
+
+  function renderVariants(variants) {
+    $('variantsCount').textContent = variants.length ? `(${variants.length})` : '';
+    if (!variants.length) {
+      $('variantsBlock').innerHTML = `<p class="empty">No variants yet — run Tailor against a job description to populate this list.</p>`;
+      return;
+    }
+    $('variantsBlock').innerHTML = variants.map(v => {
+      const pdfLink = v.pdf
+        ? `<a class="btn" href="/feed/api/resume/variants/${v._id}/pdf" target="_blank">PDF (${(v.pdf.size / 1024).toFixed(0)} KB)</a>`
+        : `<span class="pdf-meta">no PDF</span>`;
+      const head = `${esc(v.jobTitle || '(no title)')}${v.jobCompany ? ' · ' + esc(v.jobCompany) : ''}`;
+      const metaBits = [
+        new Date(v.generatedAt).toLocaleString(),
+        v.modelLabel ? esc(v.modelLabel) : '',
+        v.mode ? esc(v.mode) : '',
+        v.atsScore != null ? `ATS ${v.atsScore}` : '',
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="variant">
+          <div style="flex:1;min-width:200px">
+            <div class="variant__title">${head}</div>
+            <div class="variant__meta">${metaBits}</div>
+          </div>
+          ${pdfLink}
+        </div>`;
+    }).join('');
+  }
+
+  function clearIssues(id) { $(id).innerHTML = ''; }
+  function showValidation(targetId, validation) {
+    const root = $(targetId);
+    if (!validation) { root.innerHTML = ''; return; }
+    let html = '';
+    if (validation.errors?.length) {
+      html += `<div class="errors-block"><strong>Errors (${validation.errors.length}):</strong><ul>${validation.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
+    }
+    if (validation.warnings?.length) {
+      html += `<div class="warns-block"><strong>Warnings (${validation.warnings.length}):</strong><ul>${validation.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`;
+    }
+    root.innerHTML = html;
+  }
+
+  // ── Shared scalars save ──
+  $('sharedSave').addEventListener('click', async () => {
+    const btn = $('sharedSave'); btn.disabled = true;
+    setStatus('sharedStatus', 'Saving…');
+    const patch = {};
+    document.querySelectorAll('input[data-scalar]').forEach(inp => { patch[inp.dataset.scalar] = inp.value || ''; });
+    try {
+      const r = await fetch('/api/resume/shared', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      // Mirror locally so paste textareas reflect the change after a save.
+      if (tailorJson) { tailorJson.personalInfo = { ...(tailorJson.personalInfo || {}), ...patch }; renderTailorJson(); }
+      if (feedJson)   { feedJson.personalInfo   = { ...(feedJson.personalInfo   || {}), ...patch }; renderFeedJson();   }
+      setStatus('sharedStatus', `Saved ${Object.keys(patch).length} fields to both JSONs`, 'ok');
+    } catch (e) {
+      setStatus('sharedStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  // ── Tailor JSON ──
+  function parseTextarea(id) {
+    try { return { ok: true, value: JSON.parse($(id).value) }; }
+    catch (e) { return { ok: false, error: 'Invalid JSON: ' + e.message }; }
+  }
+
+  $('tailorValidate').addEventListener('click', async () => {
+    const p = parseTextarea('tailorJson');
+    if (!p.ok) { showValidation('tailorIssues', { errors: [p.error], warnings: [] }); return; }
+    // Send to server to validate without saving — use the dry-run by parse-only
+    // shortcut: server validates on PUT. To preview without persistence, we
+    // just run the parse client-side and show our own rough check. Real
+    // validation is the server's PUT response.
+    showValidation('tailorIssues', null);
+    setStatus('tailorStatus', 'JSON parses cleanly — Save to run server validation.', 'ok');
+  });
+
+  $('tailorSave').addEventListener('click', async () => {
+    const p = parseTextarea('tailorJson');
+    if (!p.ok) { showValidation('tailorIssues', { errors: [p.error], warnings: [] }); return; }
+    const btn = $('tailorSave'); btn.disabled = true;
+    setStatus('tailorStatus', 'Validating + saving…');
+    try {
+      const r = await fetch('/api/resume/tailor', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p.value),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showValidation('tailorIssues', d.validation);
+        throw new Error(d.error || `HTTP ${r.status}`);
+      }
+      tailorJson = p.value;
+      showValidation('tailorIssues', { errors: [], warnings: d.warnings || [] });
+      setStatus('tailorStatus', `Saved · history depth grew by 1`, 'ok');
+      await loadAll();
+    } catch (e) {
+      setStatus('tailorStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  $('tailorReset').addEventListener('click', () => { renderTailorJson(); setStatus('tailorStatus', 'Reset to current.', 'ok'); });
+
+  $('tailorRestore').addEventListener('click', async () => {
+    const idx = $('tailorHistorySel').value;
+    if (idx === '') { setStatus('tailorStatus', 'Pick a history entry first.', 'err'); return; }
+    if (!confirm(`Restore tailor JSON from backup #${parseInt(idx,10)+1}? The current version will be archived.`)) return;
+    setStatus('tailorStatus', 'Restoring…');
+    const r = await fetch('/api/resume/restore', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ which: 'tailor', index: parseInt(idx, 10) }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setStatus('tailorStatus', d.error || `HTTP ${r.status}`, 'err'); return; }
+    setStatus('tailorStatus', 'Restored.', 'ok');
+    await loadAll();
+  });
+
+  // ── Feed JSON ──
+  $('feedValidate').addEventListener('click', async () => {
+    const p = parseTextarea('feedJson');
+    if (!p.ok) { showValidation('feedIssues', { errors: [p.error], warnings: [] }); return; }
+    showValidation('feedIssues', null);
+    setStatus('feedStatus', 'JSON parses cleanly — Save to run server validation.', 'ok');
+  });
+
+  $('feedSave').addEventListener('click', async () => {
+    const p = parseTextarea('feedJson');
+    if (!p.ok) { showValidation('feedIssues', { errors: [p.error], warnings: [] }); return; }
+    const btn = $('feedSave'); btn.disabled = true;
+    setStatus('feedStatus', 'Validating + saving…');
+    try {
+      const r = await fetch('/api/resume/feed', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p.value),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showValidation('feedIssues', d.validation);
+        throw new Error(d.error || `HTTP ${r.status}`);
+      }
+      feedJson = p.value;
+      showValidation('feedIssues', { errors: [], warnings: d.warnings || [] });
+      setStatus('feedStatus', `Saved · history depth grew by 1`, 'ok');
+      await loadAll();
+    } catch (e) {
+      setStatus('feedStatus', e.message, 'err');
+    } finally { btn.disabled = false; }
+  });
+
+  $('feedReset').addEventListener('click', () => { renderFeedJson(); setStatus('feedStatus', 'Reset to current.', 'ok'); });
+
+  $('feedRestore').addEventListener('click', async () => {
+    const idx = $('feedHistorySel').value;
+    if (idx === '') { setStatus('feedStatus', 'Pick a history entry first.', 'err'); return; }
+    if (!confirm(`Restore feed JSON from backup #${parseInt(idx,10)+1}? The current version will be archived.`)) return;
+    setStatus('feedStatus', 'Restoring…');
+    const r = await fetch('/api/resume/restore', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ which: 'feed', index: parseInt(idx, 10) }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setStatus('feedStatus', d.error || `HTTP ${r.status}`, 'err'); return; }
+    setStatus('feedStatus', 'Restored.', 'ok');
+    await loadAll();
+  });
+
+  // ── PDF upload ──
+  $('pdfPickBtn').addEventListener('click', () => $('pdfFile').click());
+  $('pdfFile').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setStatus('pdfStatus', 'Only PDF files are accepted', 'err'); return;
+    }
+    if (file.size > 5 * 1024 * 1024) { setStatus('pdfStatus', 'PDF must be < 5MB', 'err'); return; }
+    setStatus('pdfStatus', `Uploading ${file.name}…`);
+    try {
+      const buffer = await file.arrayBuffer();
+      const r = await fetch(`/feed/api/resume/pdf?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: buffer,
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setStatus('pdfStatus', `Saved ${d.filename} (${(d.size / 1024).toFixed(1)} KB)`, 'ok');
+      await loadAll();
+    } catch (e) {
+      setStatus('pdfStatus', e.message, 'err');
+    } finally { event.target.value = ''; }
+  });
+
+  // ── Schema helpers ────────────────────────────────────────────────
+  // Two separate shapes: TAILOR_EXAMPLE drives Generate/PDF; FEED_EXAMPLE
+  // drives outreach scoring + email drafting. Both are independent and
+  // have meaningfully different schemas (tailor has categorized skills +
+  // stackUsed per project; feed has a flat skill-alias map).
+  // Tailor shape — the canonical example lives here (shown on the page).
+  const TAILOR_EXAMPLE = {
+    personalInfo: {
+      name: "Rahul Sharma",
+      dob: "15/06/1999",
+      email: "rahul.sharma@gmail.com",
+      phone: "+91-9876543210",
+      location: "Bangalore, Karnataka, India",
+      linkedin: "linkedin.com/in/rahulsharma",
+      github: "github.com/rahulsharma",
+      portfolio: "https://rahulsharma.dev/",
+      leetcode: "leetcode.com/rahulsharma"
+    },
+    meta: {
+      experienceStart: "Jun 2022",
+      stack: "JavaScript / React / Node.js",
+      primaryCloud: "AWS",
+      coreProjects: ["TrackWave", "ShopGrid"],
+      selectableProjects: ["PayrollHub", "QuickChat", "DesignBoard"],
+      editableProjects: ["TrackWave", "ShopGrid"],
+      cannotClaim: [
+        "Java", "Spring Boot", "Kotlin",
+        "Python Django", "Python Flask", "FastAPI",
+        "PHP Laravel", "C#", ".NET",
+        "Go", "Rust",
+        "GCP", "Azure",
+        "Kubernetes", "Terraform",
+        "Kafka", "RabbitMQ", "GraphQL", "gRPC",
+        "Machine Learning", "AI", "TensorFlow", "PyTorch",
+        "iOS", "Swift", "Flutter", "React Native"
+      ]
+    },
+    professionalSummary: {
+      default: "Full stack JavaScript developer with 3+ years of experience building scalable web applications using React, Next.js, TypeScript, Express and Node.js. Focused on clean architecture, performance optimization, and delivering production-grade solutions.",
+      keywords: [
+        "Full Stack Developer", "Full Stack JavaScript", "React", "Next.js",
+        "TypeScript", "Node.js", "Express", "MongoDB",
+        "Performance Optimization", "Scalable Applications"
+      ]
+    },
+    skills: {
+      frontend: [
+        "React.js", "Next.js", "TypeScript", "JavaScript (ES6+)",
+        "HTML5", "CSS3/SCSS", "Tailwind CSS", "Redux Toolkit", "React Query"
+      ],
+      backend: [
+        "Node.js", "Express.js", "PostgreSQL", "MongoDB",
+        "MySQL", "Redis", "WebSockets", "Socket.io"
+      ],
+      toolsDevOps: [
+        "Git", "Docker", "AWS", "EC2", "S3",
+        "Nginx", "GitHub Actions", "CI/CD Pipelines", "Jest"
+      ],
+      other: [
+        "REST APIs", "JWT", "OAuth2", "RBAC", "SSR", "SEO",
+        "Performance Optimization", "System Design",
+        "MongoDB Aggregation", "Query Optimization"
+      ]
+    },
+    experience: [
+      {
+        company: "TechNova Solutions Pvt. Ltd.",
+        title: "SDE (Full Stack Developer)",
+        duration: "Jun 2022 – Present",
+        location: "Bangalore",
+        isCurrent: true,
+        projects: [
+          {
+            name: "TrackWave – Fleet Management & Logistics Platform",
+            description: "Large-scale B2B SaaS platform for managing fleet operations and logistics, used by transport companies and warehouse operators across India. Built real-time vehicle tracking with map integrations, route optimization dashboards, driver management modules, and automated alert systems for delivery SLA breaches. Implemented WebSocket-based live location updates, role-based access control for fleet managers and drivers, and MongoDB aggregation pipelines for analytics reporting. Improved API response times by 15x through proper indexing and query optimization.",
+            coreTech: [
+              "Real-Time WebSocket Tracking",
+              "Map Integration",
+              "MongoDB Advanced Optimization",
+              "Role-Based Access Control",
+              "Automated Alert System"
+            ],
+            stackUsed: {
+              frontend: "React, TypeScript, Tailwind CSS",
+              backend: "Node.js, Express, MongoDB",
+              security: "JWT, RBAC, XSS/CSRF Prevention",
+              realtime: "WebSockets, Socket.io"
+            }
+          }
+        ],
+        bullets: [
+          "Built & maintained 5+ production web applications with React, Next.js, TypeScript & Tailwind CSS, delivering responsive, scalable solutions",
+          "Improved page load times and Core Web Vitals by 40% through code splitting, lazy loading, and webpack optimization",
+          "Optimized backend performance on MongoDB and SQL through indexing and aggregation pipelines, reducing API response time by 10x",
+          "Built multi-tenant payroll system with biometric attendance integration and policy-based access control"
+        ]
+      },
+      {
+        company: "CodeCraft Labs",
+        title: "Web Development Intern",
+        duration: "Jan 2022 – May 2022",
+        location: "Remote",
+        isCurrent: false,
+        bullets: [
+          "Built REST APIs and frontend components using Node.js and React",
+          "Developed automation scripts for data processing and reporting tasks",
+          "Worked on internal tools for team productivity and workflow management"
+        ]
+      }
+    ],
+    projects: [
+      {
+        name: "ResumeForge (ATS Tailoring Tool)",
+        description: "AI-powered resume tailoring tool with CLI and React web UI. Implements clipboard integration for job description extraction, uses structured JSON resume profile as knowledge base, runs keyword extraction and ATS scoring algorithms, and generates tailored resume outputs with skill-claim validation. Integrated multiple LLM APIs including AWS Bedrock and Google Gemini with prompt engineering, cost tracking via CloudWatch, and comprehensive logging.",
+        coreTech: [
+          "AWS Bedrock Claude API",
+          "Google Gemini API",
+          "Prompt Engineering",
+          "ATS Scoring Algorithm",
+          "CLI Development"
+        ],
+        stackUsed: {
+          frontend: "React, HTML5, Bootstrap",
+          backend: "Node.js, JavaScript",
+          integration: "AWS Bedrock, Gemini API, CloudWatch",
+          algorithms: "Keyword Extraction, ATS Scoring Logic"
+        }
+      }
+    ],
+    education: [
+      {
+        degree: "B.Tech in Computer Science",
+        field: "Computer Science",
+        institution: "PES University, Bangalore",
+        duration: "Aug 2018 - July 2022",
+        score: "8.2 CGPA"
+      }
+    ]
+  };
+
+  const FEED_EXAMPLE = {
+    personalInfo: {
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+      phone: "+91 90000 00000",
+      location: "Bengaluru, India",
+      linkedin: "linkedin.com/in/adalovelace",
+      github: "github.com/adalovelace",
+      portfolio: "https://adalovelace.dev",
+      leetcode: "leetcode.com/adalovelace",
+      currentCTC: "9 LPA",
+      expectedCTC: "14-16 LPA"
+    },
+    experienceStart: "Aug 2023",
+    stack: "JavaScript / React / Node.js",
+    summary: "Full-stack engineer (~3 yrs) focused on React/Next + Node/Mongo. Comfortable owning features end-to-end.",
+    skills: {
+      "React.js":   ["React", "react.js"],
+      "Next.js":    ["Next", "nextjs"],
+      "Node.js":    ["Node", "nodejs"],
+      "TypeScript": ["TS"],
+      "MongoDB":    ["mongo"],
+      "PostgreSQL": ["Postgres", "psql"],
+      "REST APIs":  [],
+      "Docker":     [],
+      "AWS":        ["EC2", "S3"]
+    },
+    cannotClaim: [
+      "Java", "Spring Boot", "Kotlin",
+      "Python Django", "Python Flask",
+      "PHP", "Laravel",
+      ".NET", "C#",
+      "Go", "Rust",
+      "React Native", "Flutter", "iOS", "Swift",
+      "Machine Learning", "AI", "TensorFlow",
+      "Kubernetes", "Terraform", "Kafka", "GraphQL", "gRPC"
+    ],
+    projects: [
+      {
+        name: "Quick Habit",
+        description: "Open-source habit tracker (Next.js + Postgres). 1.4k GitHub stars."
+      }
+    ],
+    preferences: {
+      country: "India",
+      currency: "INR",
+      salaryUnit: "LPA",
+      usdRate: 85,
+      minSalary: 6,
+      maxExperienceGap: 1,
+      rejectWalkIn: true,
+      rejectContract: true,
+      rejectIntern: true,
+      rejectStaffing: true,
+      excludeCompanies: [],
+      noticePeriod: null
+    }
+  };
+
+  const TAILOR_PROMPT_TEMPLATE = (exampleJson) => `Convert the resume below into JSON that matches the EXACT schema shown. This JSON powers a "Tailor" pipeline that rewrites a resume to a specific JD and generates a PDF — so deep, detailed project descriptions help the AI produce stronger output later.
+
+Output ONLY valid JSON. No commentary, no markdown code fences.
+
+REQUIRED SCHEMA (use as the template; replace values with mine):
+${exampleJson}
+
+KEY RULES:
+- personalInfo.name and personalInfo.email are required. dob is "DD/MM/YYYY"; phone/location/linkedin/github/portfolio/leetcode are optional.
+- meta.experienceStart must be "Mon YYYY" (e.g. "Jun 2022").
+- meta.coreProjects = work project names you ALWAYS want featured in bullets (must match names in experience[].projects[].name).
+- meta.selectableProjects = work projects that may be picked depending on the JD; editableProjects = subset whose bullets can be AI-rewritten.
+- meta.cannotClaim = skills I do NOT have. Be aggressive: list the technologies adjacent to my stack that recruiters commonly ask for but I have NOT used — a JS dev might list Java/.NET/Django, a Python dev Node.js/PHP/Spring, a Java dev Go/Rust/.NET — plus clouds, infra (Kubernetes, Terraform), messaging (Kafka, gRPC), ML/AI and mobile (iOS, Flutter, React Native) unless I explicitly mention having them.
+- professionalSummary.default should be 200+ characters; keywords[] is a tag list for ATS keyword matching.
+- skills is an OBJECT of CATEGORIZED buckets, each an array of skill strings. Do NOT use a flat alias map (that's the feed schema). The ATS scorer only flattens these specific bucket names: frontend, backend, toolsDevOps, databases, other — any other key gets silently dropped during keyword matching, so stick to this set.
+- The bucket names are fixed to the keys above. They're labelled for web-dev roles, but adapt freely: QA/SDET → put testing tools, frameworks, and methodologies in toolsDevOps + other; data analyst → SQL/Python in backend, BI/viz/stats tools in other; DevOps → cloud/CI/infra in toolsDevOps, scripting in backend; designer → design tools + research methods in other, any CSS/HTML in frontend. If a skill doesn't fit any bucket, use other (it's the catch-all). Required: at least one bucket with at least one skill.
+- experience[] are work jobs. Each needs company, title, duration, location, isCurrent.
+- experience[].projects[].description should be 100+ words: what was built, your role, the tech, the impact with numbers.
+- experience[].projects[].coreTech is a short list of the project's standout tech.
+- experience[].projects[].stackUsed is an OBJECT grouping the project's tech by area (frontend / backend / security / realtime / integration / etc.) — values are comma-separated strings.
+- experience[].bullets[] are concise quantified outcomes (one line each).
+- projects[] = personal / open-source projects (separate from work experience). Same {name, description, coreTech, stackUsed} shape as experience[].projects[].
+- education[] is optional but include if relevant. degree + institution required; field + duration + score optional.
+
+MY RESUME (free text — paste below this line and let the AI infer the rest):
+<<<paste your resume / work history / projects / skills here>>>
+`;
+
+  const FEED_PROMPT_TEMPLATE = (exampleJson) => `Convert the resume below into JSON that matches the EXACT schema shown. This JSON powers an "Outreach" pipeline that scores LinkedIn hiring posts against my profile and drafts cold emails — accuracy of skills and the cannotClaim list matters more than length.
+
+Output ONLY valid JSON. No commentary, no markdown code fences.
+
+REQUIRED SCHEMA (use as the template; replace values with mine):
+${exampleJson}
+
+KEY RULES:
+- experienceStart must be "Mon YYYY" (e.g. "Aug 2023").
+- stack is a short tag like "React/Node.js", "Python/Django", "Java/Spring".
+- summary is one short paragraph (1-2 sentences) — not a long bio.
+- skills is a FLAT map: { "Canonical Name": ["alias1", "alias2"] }. Include common aliases.
+- cannotClaim is the MOST IMPORTANT field — list every skill I do NOT have. Be aggressive: the technologies adjacent to my stack that recruiters commonly ask for but I have NOT used — a JS dev might list Java/.NET/Django, a Python dev Node.js/PHP/Spring, a Java dev Go/Rust/.NET — plus clouds, infra (Kubernetes, Terraform), messaging (Kafka, gRPC), ML/AI and mobile (iOS, Flutter, React Native) unless I explicitly mention having them.
+- personalInfo.currentCTC and expectedCTC are optional but printed verbatim in email sign-offs — free text in whatever unit I quote salaries in (e.g. "9 LPA", "$85k", "€60k", "45-50k GBP").
+- projects[] is a slim list of personal projects, one-line descriptions are fine.
+- preferences tunes the scorer and drafter. Every key is optional; the values in the example are the defaults:
+  - country: where I want to work — posts hiring elsewhere are filtered out.
+  - currency + salaryUnit: how salaries are quoted in my market ("INR" + "LPA" = lakhs per annum; "USD" + "k/yr" works the same way).
+  - usdRate: units of my currency per 1 USD, used to normalise dollar salaries seen in posts.
+  - minSalary: posts offering less than this (in salaryUnit) are rejected.
+  - maxExperienceGap: years a post may ask for beyond what I have before it is rejected.
+  - rejectWalkIn / rejectContract / rejectIntern / rejectStaffing: drop walk-in drives, contract roles, internships and staffing-agency posts.
+  - excludeCompanies: companies never to draft to; if empty, the pipeline uses my current employer from experience[0].company when that array is present.
+  - noticePeriod: free text quoted in emails (e.g. "30 days"); null leaves it out.
+
+MY RESUME (free text — paste below this line):
+<<<paste your resume / work history / projects / skills here>>>
+`;
+
+  function setupSchemaHelpers() {
+    const tailorPretty = JSON.stringify(TAILOR_EXAMPLE, null, 2);
+    const feedPretty   = JSON.stringify(FEED_EXAMPLE, null, 2);
+    $('tailorExample').querySelector('pre').textContent = tailorPretty;
+    $('feedExample').querySelector('pre').textContent   = feedPretty;
+
+    document.querySelectorAll('[data-example-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const which = btn.dataset.exampleToggle;
+        const block = $(which + 'Example');
+        const open = block.classList.toggle('open');
+        btn.textContent = open ? 'Hide example' : 'Show example';
+      });
+    });
+
+    document.querySelectorAll('[data-prompt-copy]').forEach(btn => {
+      const original = btn.textContent;
+      btn.addEventListener('click', async () => {
+        const which = btn.dataset.promptCopy;
+        const prompt = which === 'tailor'
+          ? TAILOR_PROMPT_TEMPLATE(tailorPretty)
+          : FEED_PROMPT_TEMPLATE(feedPretty);
+        try {
+          await navigator.clipboard.writeText(prompt);
+          btn.textContent = 'Copied!';
+        } catch {
+          btn.textContent = 'Copy failed';
+        }
+        setTimeout(() => { btn.textContent = original; }, 1500);
+      });
+    });
+  }
+
+  // First run: /setup hands off here with ?setup=1. Say what the two panes
+  // are once, then drop the flag so a reload shows the ordinary lead.
+  function firstRunHint() {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('setup')) return false;
+    params.delete('setup');
+    const qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : ''));
+    return true;
+  }
+
+  // ── Boot ──
+  (async () => {
+    setupSchemaHelpers();
+    const welcome = firstRunHint();
+    await loadMe();
+    await loadAll();
+    if (welcome) {
+      $('lead').textContent = 'Welcome — paste your tailor resume JSON on the left and your feed / outreach JSON on the right (each pane has "Show example" and "Copy AI prompt"), then Save. Upload your master PDF below.';
+    }
+  })();
+})();
+</script>
+</body>
+</html>

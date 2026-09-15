@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mail · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+<style>
+  .mx-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:8px; margin-bottom:14px; overflow:hidden; }
+  .mx-cell { padding:10px 14px 8px; display:flex; align-items:baseline; gap:10px; cursor:pointer;
+    box-shadow:inset -1px 0 0 0 var(--line-soft); transition:background 90ms ease; }
+  .mx-cell:hover { background:var(--surface-2); }
+  .mx-cell[data-active="true"] { background:var(--surface-2); box-shadow:inset -1px 0 0 0 var(--line-soft), inset 0 -2px 0 0 var(--gold); }
+  .mx-n { font:700 20px/1 var(--sans); }
+  .mx-l { font:650 10.5px/1 var(--sans); letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2); }
+
+  .mx-row { border:1px solid var(--line-soft); border-radius:8px; background:var(--surface); margin-bottom:8px; padding:12px 14px; }
+  .mx-row[data-blocked="true"] { border-left:2px solid var(--brick); }
+  .mx-top { display:flex; align-items:flex-start; gap:12px; }
+  .mx-main { flex:1; min-width:0; }
+  .mx-subj { font:650 14.5px/1.45 var(--sans); color:var(--ink); letter-spacing:-.005em; }
+  .mx-from { font:550 12px/1.6 var(--sans); color:var(--ink-2); }
+  .mx-snip { font:450 13px/1.6 var(--sans); color:var(--ink); opacity:.86; margin-top:6px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .mx-acts { display:flex; gap:6px; flex-shrink:0; }
+  .mx-body { display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--line-soft); }
+  .mx-row.open .mx-body { display:block; }
+  .mx-pre { white-space:pre-wrap; font:400 12.5px/1.65 var(--mono); color:var(--ink); opacity:.82;
+    max-height:220px; overflow:auto; background:var(--bg); padding:10px; border-radius:6px; }
+  .mx-ta { width:100%; min-height:150px; background:var(--bg); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:10px; font:400 13px/1.6 var(--sans); resize:vertical; }
+  .mx-in { width:100%; background:var(--bg); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:8px 10px; font:400 13px/1.4 var(--sans); margin-bottom:8px; }
+  .mx-warn { font:500 11.5px/1.5 var(--sans); color:var(--ember); margin:6px 0; }
+  .mx-tasks { margin:10px 0 12px; padding:10px 12px; border:1px solid var(--gold-line);
+    background:var(--gold-soft); border-radius:8px; }
+  .mx-tasks__h { font:650 10.5px/1 var(--sans); letter-spacing:.08em; text-transform:uppercase;
+    color:var(--gold); margin-bottom:8px; }
+  .mx-task { display:flex; gap:10px; align-items:baseline; padding:7px 0; border-bottom:1px solid var(--line-soft); }
+  .mx-task:last-child { border-bottom:0; }
+  .mx-due { font:600 11px/1 var(--mono); padding:2px 6px; border-radius:4px; }
+  .mx-btn {
+    background:var(--surface-2); border:1px solid var(--line); color:var(--ink-2);
+    border-radius:6px; padding:5px 11px; font:600 12px/1 var(--sans);
+    cursor:pointer; white-space:nowrap;
+  }
+  .mx-btn:hover { border-color:var(--gold); color:var(--gold); }
+  .mx-btn--primary { border-color:var(--gold); color:var(--gold); }
+  .mx-btn:disabled { opacity:.45; cursor:not-allowed; }
+  .mx-empty { text-align:center; padding:44px 20px; color:var(--ink-3); font:500 13px/1.6 var(--sans); }
+</style>
+</head>
+<body>
+<div class="page-head">
+  <div>
+    <div class="page-head__eyebrow">Outreach</div>
+    <h1 class="page-head__title">Mail</h1>
+    <p class="page-head__lead">Job mail pulled from your inbox, routed into replies, tasks and review.</p>
+  </div>
+</div>
+
+<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+  <button class="mx-btn" id="syncBtn">↻ Sync inbox</button>
+  <button class="mx-btn" id="composeBtn">✎ Compose from a post</button>
+  <span id="syncNote" style="font:500 12px/2.2 var(--sans);color:var(--ink-3)"></span>
+</div>
+
+<div class="mx-stats" id="stats"></div>
+<div id="composePane" style="display:none" class="mx-row">
+  <div class="mx-subj" style="margin-bottom:8px">Compose from a post</div>
+  <textarea class="mx-ta" id="cxText" placeholder="Paste the LinkedIn post or job description here — including the email address in it."></textarea>
+  <div style="display:flex;gap:6px;margin-top:8px">
+    <button class="mx-btn" id="cxDraft">Generate</button>
+    <button class="mx-btn" id="cxCancel">Cancel</button>
+  </div>
+  <div id="cxOut" style="display:none;margin-top:12px">
+    <input class="mx-in" id="cxTo" placeholder="to@company.com">
+    <input class="mx-in" id="cxSubj" placeholder="Subject">
+    <textarea class="mx-ta" id="cxBody"></textarea>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button class="mx-btn mx-btn--primary" id="cxSend">Send</button>
+      <span id="cxNote" style="font:500 12px/2.2 var(--sans);color:var(--ink-3)"></span>
+    </div>
+  </div>
+</div>
+
+<div id="rows"></div>
+
+<script>
+  let bucket = 'reply';
+  let items = [];
+  let counts = {};
+  let fups = { stalled: [], silent: [] };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  // Escape first, then linkify: the reverse order would let a crafted URL in a
+  // recruiter's email inject markup.
+  const linkify = (t) => esc(t).replace(
+    /\bhttps?:\/\/[^\s<>"')]+/g,
+    (u) => `<a class="detail-link" href="${u}" target="_blank" rel="noopener noreferrer">${u.length > 70 ? u.slice(0, 67) + '…' : u}</a>`
+  );
+
+  const j = (u, b) => fetch(u, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).then(r => r.json().then(d => ({ ok:r.ok, d })));
+
+  async function load() {
+    const [r, f] = await Promise.all([
+      fetch(`/api/mail?bucket=${bucket}&limit=${bucket === 'all' ? 20 : 200}`).then((x) => x.json()),
+      fetch('/api/mail/followups').then((x) => x.json()).catch(() => ({ stalled: [], silent: [] })),
+    ]);
+    items = r.items || []; counts = r.counts || {};
+    fups = { stalled: f.stalled || [], silent: f.silent || [] };
+    renderStats();
+    bucket === 'followup' ? renderFollowUps() : renderRows();
+  }
+
+  // Stalled first and labelled: a lapsed conversation is worth more than a
+  // contact that never answered, and they need different copy.
+  function renderFollowUps() {
+    const el = document.getElementById('rows');
+    const all = [...fups.stalled, ...fups.silent];
+    if (!all.length) { el.innerHTML = '<div class="mx-empty">Nothing to nudge.</div>'; return; }
+    el.innerHTML = all.map((f) => `
+      <div class="mx-row" data-fup="${esc(f.postId)}">
+        <div class="mx-top">
+          <div class="mx-main">
+            <div class="mx-subj">${esc(f.jobTitle || f.subject || '(no subject)')}${f.company ? ` · ${esc(f.company)}` : ''}</div>
+            <div class="mx-from">
+              <span style="color:${f.kind === 'stalled' ? 'var(--gold)' : 'var(--ink-3)'};font-weight:600">
+                ${f.kind === 'stalled' ? 'replied, then went quiet' : 'never answered'}</span>
+              · ${f.quietDays}d · ${esc(f.to)}
+            </div>
+            ${f.theirLastMessage ? `<div class="mx-snip">${esc(f.theirLastMessage)}</div>` : ''}
+            <div style="margin-top:6px"><button class="mx-btn" data-fact="peek">Show thread</button></div>
+          </div>
+          <div class="mx-acts">
+            <button class="mx-btn" data-fact="draft">Draft nudge</button>
+            <button class="mx-btn" data-fact="dismiss">Dismiss</button>
+          </div>
+        </div>
+        <div class="mx-body"></div>
+      </div>`).join('');
+  }
+
+  function renderStats() {
+    const cells = [
+      ['all', 'Inbox', Math.min(counts.all || 0, 20)],
+      ['reply', 'Replies', counts.reply || 0],
+      ['task', 'Tasks', counts.task || 0],
+      ['review', 'Review', counts.review || 0],
+      ['followup', 'Follow-ups', (fups.stalled?.length || 0) + (fups.silent?.length || 0)],
+    ];
+    document.getElementById('stats').innerHTML = cells.map(([k, l, n]) =>
+      `<div class="mx-cell" data-b="${k}" data-active="${bucket === k}"><span class="mx-n">${n}</span><span class="mx-l">${l}</span></div>`).join('');
+    document.querySelectorAll('.mx-cell').forEach(c =>
+      c.addEventListener('click', () => { bucket = c.dataset.b; load(); }));
+  }
+
+  function taskRow(t) {
+    const due = t.dueAt ? new Date(t.dueAt) : null;
+    const soon = due && (due - Date.now()) < 3 * 864e5;
+    const col = t.urgency === 'high' || soon ? 'var(--brick)' : 'var(--ember)';
+    return `<div class="mx-task">
+      <span class="mx-due" style="background:${col}22;color:${col}">${esc(t.dueAt || t.kind || '—')}</span>
+      <span style="flex:1"><b>${esc(t.title)}</b><br><span style="color:var(--ink-3);font-size:12px">${esc(t.detail || '')}</span></span>
+      ${t.link ? `<a class="detail-link" href="${esc(t.link)}" target="_blank" rel="noopener">open</a>` : ''}
+    </div>`;
+  }
+
+  function renderRows() {
+    const el = document.getElementById('rows');
+    if (!items.length) {
+      el.innerHTML = `<div class="mx-empty">${bucket === 'all' ? 'Inbox is empty' : `Nothing in ${bucket}`}. Hit “Sync inbox” to pull recent mail.</div>`;
+      return;
+    }
+    el.innerHTML = items.map((m) => {
+      const blocked = !m.automatable;
+      return `<div class="mx-row ${m.status === 'drafted' ? 'open' : ''}" data-blocked="${blocked}" data-id="${esc(m.messageId)}">
+        <div class="mx-top">
+          <div class="mx-main" onclick="this.closest('.mx-row').classList.toggle('open')" style="cursor:pointer">
+            <div class="mx-subj">${esc(m.subject)}</div>
+            <div class="mx-from">${esc(m.from)} · ${new Date(m.receivedAt).toLocaleString()}${m.linkedJobTitle ? ` · re: ${esc(m.linkedJobTitle)}` : ''}</div>
+            <div class="mx-snip">${esc(String(m.body).slice(0, 220))}</div>
+            ${bucket === 'all' ? `<div class="mx-from" style="margin-top:4px">
+              <span class="mx-due" style="background:var(--surface-3);color:var(--ink-2)">${esc(m.bucket)}</span>
+              ${m.status && m.status !== 'new' ? `<span class="mx-due" style="background:var(--surface-3);color:var(--ink-3)">${esc(m.status)}</span>` : ''}
+            </div>` : ''}
+            ${blocked ? `<div class="mx-warn">Held for review — ${esc(m.reason)}. Nothing is drafted or sent for these.</div>` : ''}
+          </div>
+          <div class="mx-acts">
+            ${!blocked && m.status !== 'replied' ? `<button class="mx-btn" data-act="draft">${m.bucket === 'task' ? 'Extract' : 'Draft'}</button>` : ''}
+            ${blocked ? `<button class="mx-btn mx-btn--primary" data-act="toReply" title="Override the filter and treat this as job mail">Use it →</button>` : ''}
+            ${!blocked && m.bucket !== 'task' ? `<button class="mx-btn" data-act="toTask" title="Treat as an actionable task">To tasks</button>` : ''}
+            <button class="mx-btn" data-act="dismiss">Dismiss</button>
+          </div>
+        </div>
+        <div class="mx-body">
+          ${(m.tasks || []).length
+            ? `<div class="mx-tasks"><div class="mx-tasks__h">To do</div>${m.tasks.map(taskRow).join('')}</div>`
+            : ''}
+          <div class="mx-pre">${linkify(m.body)}</div>
+          ${m.draft ? `
+            ${(m.unanswered || []).length ? `<div class="mx-warn">Needs your input: ${m.unanswered.map(esc).join(' · ')}</div>` : ''}
+            <input class="mx-in" data-f="subject" value="${esc(m.draftSubject || '')}" style="margin-top:10px">
+            <textarea class="mx-ta" data-f="body">${esc(m.draft)}</textarea>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="mx-btn mx-btn--primary" data-act="send">Send reply</button>
+              <span style="font:500 12px/2.2 var(--sans);color:var(--ink-3)">to ${esc(m.fromAddr)}</span>
+            </div>` : ''}
+          ${m.status === 'replied' ? `<div class="mx-warn" style="color:var(--gold)">Replied ${m.handledAt ? new Date(m.handledAt).toLocaleString() : ''}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.addEventListener('click', async (e) => {
+    const fbtn = e.target.closest('[data-fact]');
+    if (fbtn) {
+      const row = fbtn.closest('.mx-row');
+      const postId = row.dataset.fup;
+      const was = fbtn.textContent; fbtn.disabled = true; fbtn.textContent = '…';
+      try {
+        if (fbtn.dataset.fact === 'peek') {
+          row.classList.toggle('open');
+          const b = row.querySelector('.mx-body');
+          if (!b.dataset.filled) {
+            const f = [...fups.stalled, ...fups.silent].find((x) => x.postId === postId) || {};
+            b.innerHTML =
+              (f.theirLastMessage ? `<div class="mx-tasks__h">Their last message</div><div class="mx-pre">${esc(f.theirLastMessage)}</div>` : '') +
+              (f.ourLastMessage ? `<div class="mx-tasks__h" style="margin-top:10px">What we sent</div><div class="mx-pre">${esc(f.ourLastMessage)}</div>` : '');
+            b.dataset.filled = '1';
+          }
+        } else if (fbtn.dataset.fact === 'dismiss') {
+          const { ok, d } = await j('/api/mail/followups/dismiss', { postId });
+          if (!ok) throw new Error(d.error);
+          await load();
+        } else if (fbtn.dataset.fact === 'draft') {
+          const { ok, d } = await j('/api/mail/followups/draft', { postId });
+          if (!ok) throw new Error(d.error);
+          row.classList.add('open');
+          row.querySelector('.mx-body').innerHTML = `
+            <input class="mx-in" data-f="subject" value="${esc(d.subject)}">
+            <textarea class="mx-ta" data-f="body">${esc(d.body)}</textarea>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="mx-btn mx-btn--primary" data-fact="send">Send nudge</button>
+              <span style="font:500 12px/2.2 var(--sans);color:var(--ink-3)">to ${esc(d.to)}</span>
+            </div>`;
+          row.dataset.to = d.to;
+        } else {
+          const { ok, d } = await j('/api/mail/followups/send', {
+            postId, to: row.dataset.to,
+            subject: row.querySelector('[data-f="subject"]').value,
+            body: row.querySelector('[data-f="body"]').value,
+          });
+          if (!ok) throw new Error(d.error);
+          await load();
+        }
+      } catch (err) { alert(err.message); }
+      fbtn.disabled = false; fbtn.textContent = was;
+      return;
+    }
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const row = btn.closest('.mx-row');
+    const id = row.dataset.id;
+    const act = btn.dataset.act;
+    const was = btn.textContent;
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      if (act === 'draft') {
+        const { ok, d } = await j('/api/mail/draft', { messageId: id });
+        if (!ok) throw new Error(d.error);
+      } else if (act === 'send') {
+        const subject = row.querySelector('[data-f="subject"]').value;
+        const body = row.querySelector('[data-f="body"]').value;
+        const { ok, d } = await j('/api/mail/send', { messageId: id, subject, body });
+        if (!ok) throw new Error(d.error);
+      } else if (act === 'toReply' || act === 'toTask') {
+        const { ok, d } = await j('/api/mail/reclassify', { messageId: id, bucket: act === 'toTask' ? 'task' : 'reply' });
+        if (!ok) throw new Error(d.error);
+      } else if (act === 'dismiss') {
+        const { ok, d } = await j('/api/mail/status', { messageId: id, status: 'dismissed' });
+        if (!ok) throw new Error(d.error);
+      }
+      await load();
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false; btn.textContent = was;
+    }
+  });
+
+  document.getElementById('syncBtn').addEventListener('click', async (e) => {
+    const b = e.target; b.disabled = true; b.textContent = 'Syncing…';
+    const note = document.getElementById('syncNote');
+    try {
+      const { ok, d } = await j('/api/mail/sync', {});
+      if (!ok) throw new Error(d.error);
+      note.textContent = `fetched ${d.fetched}, new ${d.added}`;
+      await load();
+    } catch (err) { note.textContent = 'sync failed: ' + err.message; }
+    b.disabled = false; b.textContent = '↻ Sync inbox';
+  });
+
+  const pane = () => document.getElementById('composePane');
+  document.getElementById('composeBtn').addEventListener('click', () => {
+    pane().style.display = pane().style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('cxCancel').addEventListener('click', () => { pane().style.display = 'none'; });
+  document.getElementById('cxDraft').addEventListener('click', async (e) => {
+    const b = e.target; b.disabled = true; b.textContent = 'Generating…';
+    try {
+      const { ok, d } = await j('/api/mail/compose', { text: document.getElementById('cxText').value });
+      if (!ok) throw new Error(d.error);
+      document.getElementById('cxTo').value = d.to || '';
+      document.getElementById('cxSubj').value = d.subject || '';
+      document.getElementById('cxBody').value = d.body || '';
+      document.getElementById('cxOut').style.display = 'block';
+      document.getElementById('cxNote').textContent = d.detectedEmails?.length > 1
+        ? `also found: ${d.detectedEmails.slice(1).join(', ')}` : '';
+    } catch (err) { alert(err.message); }
+    b.disabled = false; b.textContent = 'Generate';
+  });
+  document.getElementById('cxSend').addEventListener('click', async (e) => {
+    const b = e.target; b.disabled = true; b.textContent = 'Sending…';
+    try {
+      const { ok, d } = await j('/api/mail/compose/send', {
+        to: document.getElementById('cxTo').value,
+        subject: document.getElementById('cxSubj').value,
+        body: document.getElementById('cxBody').value,
+      });
+      if (!ok) throw new Error(d.error);
+      document.getElementById('cxNote').textContent = `sent to ${d.to}`;
+      document.getElementById('cxOut').style.display = 'none';
+      document.getElementById('cxText').value = '';
+    } catch (err) { alert(err.message); }
+    b.disabled = false; b.textContent = 'Send';
+  });
+
+  load();
+</script>
+</body>
+</html>

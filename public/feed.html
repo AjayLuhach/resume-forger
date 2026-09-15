@@ -1,0 +1,2166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Feed · Resume Forge</title>
+<script>
+  // Same HTML powers two routes: /feed (your email drafts) and /posts (the
+  // post pool). Mode is detected from the URL at init and used to hide
+  // irrelevant chrome (Generate emails / Send approved are feed-only).
+  window.__POSTS_PAGE__ = window.location.pathname === '/posts';
+</script>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+</head>
+<body>
+
+<div class="container">
+  <div class="feed-toolbar">
+    <p class="feed-subtitle" id="subtitle">Loading…</p>
+    <button class="filter-btn" id="feedCaptureBtn" title="Capture the LinkedIn feed API (real activity ids, beats the ~150-post HTML cap)" style="padding:7px 14px;font-size:0.8rem;display:inline-flex;align-items:center;gap:6px">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span id="feedCaptureLabel">Feed capture</span>
+    </button>
+    <button class="filter-btn" id="curlFeedBtn" title="Fetch posts straight from the content-search API using a pasted curl" style="padding:7px 14px;font-size:0.8rem;display:inline-flex;align-items:center;gap:6px">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M6 2 2 8l4 6M10 2l4 6-4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Curl Feed</span>
+    </button>
+    <button class="filter-btn" id="genEmailsBtn" title="Score every hiring post you haven't been drafted for and write email drafts" style="padding:7px 14px;font-size:0.8rem;display:inline-flex;align-items:center;gap:6px">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2.5 4.5h11v8h-11z M3 5l5.5 4 5.5-4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Generate emails
+    </button>
+  </div>
+
+  <!-- Feed capture: inline expandable panel (toggled by the Feed capture button) -->
+  <div id="feedCapturePanel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px"></div>
+
+  <!-- Curl Feed: paste a curl from the Network tab, pull posts straight from the API -->
+  <div id="curlFeedPanel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px">
+    <div style="font:650 12px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px">Curl Feed</div>
+    <p style="font:400 12.5px/1.6 var(--sans);color:var(--ink-2);margin:0 0 10px">
+      Open a LinkedIn content-search page, copy any <code>rsc-action/actions/pagination</code> request as cURL, and paste it below.
+      Only <code>li_at</code> and <code>JSESSIONID</code> are read from it. Posts are parsed and staged as each response lands — then hit <strong>Analyze</strong>.
+    </p>
+    <textarea id="cfCurl" placeholder="curl 'https://www.linkedin.com/flagship-web/rsc-action/actions/pagination?...' -b '...'"
+      style="width:100%;min-height:90px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:9px;font:400 11.5px/1.5 var(--mono);resize:vertical"></textarea>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px">
+      <input id="cfTerms" value="" placeholder="search terms, comma-separated — e.g. hiring software engineer, backend developer hiring"
+        style="flex:1;min-width:260px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:400 12.5px/1.4 var(--sans)">
+      <label style="font:500 12px/1 var(--sans);color:var(--ink-3);display:flex;align-items:center;gap:6px">
+        posts / term
+        <input id="cfPerTerm" type="number" min="10" max="1000" step="10" value="250"
+          style="width:78px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:400 12.5px/1.4 var(--sans)">
+      </label>
+      <button class="btn-skip-all" id="cfStart">Load</button>
+      <button class="filter-btn" id="cfStop" style="display:none">Stop</button>
+      <button class="filter-btn" id="cfClear">Clear staged</button>
+    </div>
+    <div id="cfProgress" style="font:600 12px/1.6 var(--sans);color:var(--gold);margin-top:9px"></div>
+    <pre id="cfLog" style="display:none;max-height:230px;overflow:auto;background:var(--bg);border:1px solid var(--line-soft);border-radius:6px;padding:9px;margin:9px 0 0;font:400 11.5px/1.55 var(--mono);color:var(--ink-2);white-space:pre-wrap"></pre>
+  </div>
+
+  <!-- Auto-scroll script (paste into the LinkedIn tab's console). text/plain = not executed; copied verbatim. -->
+  <script type="text/plain" id="fcScrollScript">// LinkedIn reliable auto scroll
+
+let count = 0;
+const maxScrolls = 80;
+
+// Randomly choose after how many scrolls to scroll up
+let nextScrollUpAt = Math.floor(Math.random() * 3) + 5; // 5-7
+
+const feed =
+  document.querySelector(".scaffold-finite-scroll__content") ||
+  document.querySelector("main") ||
+  document.documentElement;
+
+function autoScroll() {
+  if (count >= maxScrolls) {
+    console.log("Done scrolling");
+    return;
+  }
+
+  count++;
+
+  // Scroll up after every 5-7 downward scrolls
+  if (count % nextScrollUpAt === 0) {
+    const upAmount = Math.floor(Math.random() * 1500) + 500; // 500-2000px up
+
+    feed.scrollBy({
+      top: -upAmount,
+      behavior: "smooth",
+    });
+
+    console.log(`Scrolled UP ${upAmount}px`);
+
+    // Pick a new random interval for next time
+    nextScrollUpAt = Math.floor(Math.random() * 3) + 5;
+  } else {
+    const downAmount = Math.floor(Math.random() * 4000) + 8000; // 8000-12000px
+
+    feed.scrollBy({
+      top: downAmount,
+      behavior: "smooth",
+    });
+
+    console.log(`Scroll ${count}/${maxScrolls} (${downAmount}px down)`);
+  }
+
+  const nextDelay = Math.floor(Math.random() * 2000) + 2500; // 2.5-4.5s
+  setTimeout(autoScroll, nextDelay);
+}
+
+autoScroll();</script>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="filters" id="filters"></div>
+
+  <div class="results-row">
+    <div class="results-count" id="resultsCount"></div>
+    <button class="send-all-btn" id="sendAllBtn" title="Send all approved emails">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+        <path d="M2 10l7-7m0 0l7 7m-7-7v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="rotate(90 10 10)"/>
+      </svg>
+      Send All
+    </button>
+  </div>
+  <div class="cards cards--feed" id="cards">
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <p>Loading emails from mongo…</p>
+    </div>
+  </div>
+  <div id="loadMoreWrap" style="text-align:center;padding:24px 0;display:none">
+    <button id="loadMoreBtn" class="filter-btn" style="padding:10px 28px;font-size:0.9rem">Load More</button>
+  </div>
+</div>
+
+<div class="send-panel" id="sendPanel">
+  <div class="send-panel-header">
+    <span>Sending Emails</span>
+    <div class="send-panel-header-btns">
+      <button class="send-panel-btn" id="sendPanelMinimize" title="Minimize">&minus;</button>
+      <button class="send-panel-btn" id="sendPanelMaximize" title="Maximize" style="display:none">&#43;</button>
+    </div>
+  </div>
+  <div class="send-panel-log" id="sendLog"></div>
+</div>
+
+<!-- Parse + Generate log panel (clones send-panel styles). Bottom-right so
+     it can sit alongside a minimised send-panel without overlapping. -->
+<div class="send-panel" id="parsePanel" style="--side-offset: 320px">
+  <div class="send-panel-header">
+    <span id="parsePanelTitle">Adding posts</span>
+    <div class="send-panel-header-btns">
+      <button class="send-panel-btn" id="parsePanelMinimize" title="Minimize">&minus;</button>
+      <button class="send-panel-btn" id="parsePanelMaximize" title="Maximize" style="display:none">&#43;</button>
+    </div>
+  </div>
+  <div class="send-panel-log" id="parseLog"></div>
+</div>
+
+<button class="refresh-btn" id="refreshBtn" title="Refresh data from mongo">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <path d="M17 10a7 7 0 01-12.9 3.7M3 10a7 7 0 0112.9-3.7M17 10V4m0 6h-6M3 10v6m0-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+
+<script>
+(() => {
+  // ── State ──
+  // Server-driven model: filter/tab changes refetch instead of filtering client-side.
+  let currentItems = [];     // server-filtered list for the current view+tab+filter
+  // Posts skipped optimistically, still awaiting (or just past) their write.
+  //
+  // A skip writes to `posts`, which emits SSE, which refetches 600ms later —
+  // and any skip still in flight is still `hiring` on the server, so the
+  // refetch resurrects the card the user just dismissed. Skipping four in a
+  // row made the last two flicker back. Every payload is filtered through
+  // this set until the server view agrees.
+  //
+  // postId -> timestamp. An entry is dropped once the server stops returning
+  // the post as hiring, but never before MIN_TOMBSTONE_MS, because a post can
+  // also be absent from a payload simply by falling outside the current page.
+  const skippedLocally = new Map();
+  const MIN_TOMBSTONE_MS = 30000;
+  let currentTotals = { totalFiltered: 0, totalFilteredPosts: 0 }; // exact backend match counts for current query
+  let currentStats = {};     // stat-card numbers for the current view
+  let highSalaryMap = {};    // normalized company name → { salaryLPA, salaryMinLPA, salaryMaxLPA, employee_count }
+  // Two routes share this page — see <script> at top of file.
+  const POSTS_PAGE = !!window.__POSTS_PAGE__;
+  let postsView = POSTS_PAGE; // /posts → true on load; /feed → false (and never togglable)
+  // Track which cards the user has expanded so manual / SSE-driven re-renders
+  // don't collapse them. Keyed by postId — one operator, so a post renders at
+  // most once in either view.
+  const expandedCards = new Set();
+  function cardKey(el) {
+    return el.getAttribute('data-postid') || '';
+  }
+  // Called by the inline onclick on each card header. Toggles both the Set
+  // and the class so the next re-render replays the same state.
+  window.toggleCard = (cardEl) => {
+    if (!cardEl) return;
+    const key = cardKey(cardEl);
+    if (expandedCards.has(key)) {
+      expandedCards.delete(key);
+      cardEl.classList.remove('expanded');
+    } else {
+      expandedCards.add(key);
+      cardEl.classList.add('expanded');
+    }
+  };
+  // Re-apply the expanded class to every visible card whose key is still in
+  // the Set. Run after every innerHTML assignment in renderCards().
+  function restoreExpandedState() {
+    document.querySelectorAll('#cards .card').forEach((c) => {
+      if (expandedCards.has(cardKey(c))) c.classList.add('expanded');
+    });
+  }
+  let activeFilter = 'drafted'; // default — actionable subset (emails only)
+  let postsStatusFilter = 'hiring'; // 'all', 'hiring', 'skipped'
+  let jobTypeFilter = '';
+  let salaryFilter = '';
+  let contactMethodFilter = ''; // '', 'email', 'link', 'dm'
+  let wellKnownFilter = '';    // '', 'yes', 'no'
+  // Posts view only. Outreach on a hiring post goes stale within a day or two
+  // — a role posted last week is usually already filled or flooded — so the
+  // pool opens on the last 24 hours rather than on all 15k rows. '' = no cutoff.
+  let daysFilter = '1';        // '1', '7', '30', ''
+  let sortBy = 'recent';       // 'recent' | 'score' — posts view only
+  // Opt-in: skipping the TOP card opens the one that takes its place, so a
+  // triage pass is one click per post instead of click-skip-click-expand.
+  // Same pattern (and same reasoning) as the apply page's auto-expand.
+  let autoExpandNext = localStorage.getItem('posts.autoExpandNextOnSkip') === '1';
+  const BULK_OPEN_N = 5;       // profiles the bulk-connect button opens at once
+  // Profiles one Auto-connect click hands to the extension (content.js caps
+  // the batch at the same 25). The extension opens them one at a time.
+  const AUTO_CONNECT_N = 25;
+  // Same slug rule as connects-store.js profileKey.
+  const profileSlug = (url) => (String(url || '').match(/linkedin\.com\/in\/([^/?#]+)/i)?.[1] || '').toLowerCase();
+  // Posts the Auto-connect button would act on right now: visible, not
+  // skipped, DM-only, with a profile to open, and not already done — LinkedIn
+  // confirmed the request (sent / Pending) or they accepted. One per person.
+  const connectableNow = () => {
+    const seen = new Set();
+    return currentItems
+      .filter(p => p.status !== 'skipped' && p.contacts?.method !== 'email' && p.poster?.profileUrl && !p.connect?.done)
+      .filter(p => { const k = profileSlug(p.poster.profileUrl); if (seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0, AUTO_CONNECT_N);
+  };
+  let searchQuery = '';
+  let searchDebounce = null;
+  let feedSeq = 0;             // request sequence to ignore stale responses
+  const PAGE_SIZE = 200;
+  let currentLimit = PAGE_SIZE;
+
+  // ── Helpers ──
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function scoreClass(score) {
+    if (score >= 8) return 'score-high';
+    if (score >= 5) return 'score-mid';
+    return 'score-low';
+  }
+
+  function statusBadge(status) {
+    const s = (status || '').toLowerCase();
+    if (s === 'sent') return '<span class="badge badge-sent">Sent</span>';
+    if (s === 'approved') return '<span class="badge badge-approved">Approved</span>';
+    if (s === 'rejected') return '<span class="badge badge-rejected">Rejected</span>';
+    if (s === 'no_email') return '<span class="badge badge-no-email">No Email</span>';
+    return '<span class="badge badge-drafted">Drafted</span>';
+  }
+
+  // Accepts either a post object or a bare postId. Prefers the permalink the
+  // parser captured; otherwise rebuilds one from a real activity id. `gen-`
+  // ids are content hashes we mint ourselves, not LinkedIn ids, so they can
+  // never produce a working URL.
+  function postUrl(post) {
+    if (!post) return null;
+    if (typeof post === 'object') return post.postUrl || postUrl(post.postId);
+    return !String(post).startsWith('gen-')
+      ? `https://www.linkedin.com/feed/update/urn:li:activity:${post}/`
+      : null;
+  }
+
+  function renderOriginalPost(text) {
+    if (!text) return '';
+    return `<div class="post-summary" style="grid-column:1/-1"><h4>Original Post</h4><p style="white-space:pre-wrap;font-size:0.82rem;line-height:1.55;max-height:300px;overflow-y:auto">${escapeHtml(text)}</p></div>`;
+  }
+
+  function getActiveEmails() {
+    // Server already returned the filtered list for the active tab+filter.
+    return currentItems;
+  }
+
+  // LPA (lakhs per annum) is the unit the feed pipeline normalises every
+  // salary to before scoring (feedData.preferences.salaryUnit / usdRate on
+  // the server); the salary badges and the "6+ / 10+ / 15+" filter below
+  // follow that unit. The 85 here is a display-only USD approximation.
+  function parseSalaryToLPA(sal) {
+    if (!sal) return null;
+    const s = sal.toLowerCase().replace(/,/g, '');
+    // "8 LPA", "8L", "6-10 LPA"
+    let m = s.match(/([\d.]+)\s*(?:-\s*[\d.]+\s*)?(?:lpa|lakhs?\s*per\s*annum|l\b)/);
+    if (m) return parseFloat(m[1]);
+    // "60 LPM" (lakhs per month)
+    m = s.match(/([\d.]+)\s*lpm/);
+    if (m) return parseFloat(m[1]) * 12;
+    // ₹ amounts (Indian Rupees)
+    m = sal.match(/₹\s*([\d,]+)/);
+    if (m) {
+      const amt = parseFloat(m[1].replace(/,/g, ''));
+      return amt >= 100000 ? amt / 100000 : (amt * 12) / 100000;
+    }
+    // $X/hr
+    m = s.match(/\$\s*([\d.]+)\s*(?:\/\s*)?(?:hr|hour)/);
+    if (m) return (parseFloat(m[1]) * 2080 * 85) / 100000;
+    // $XK/yr
+    m = s.match(/\$\s*([\d.]+)\s*k?\s*(?:\/\s*)?(?:yr|year|annual)/);
+    if (m) { let v = parseFloat(m[1]); if (v < 1000) v *= 1000; return (v * 85) / 100000; }
+    // Fallback: plain number — if < 200 treat as LPA, else monthly INR
+    m = s.match(/([\d.]+)/);
+    if (m) { const v = parseFloat(m[1]); return v < 200 ? v : (v * 12) / 100000; }
+    return null;
+  }
+
+  // matchesFilter / matchesPostFilter are now no-ops — the server applies the
+  // filter set when /api/feed is called. Kept as identity returns so renderCards
+  // can keep its existing .filter(matchesFilter) call without behavior change.
+  function matchesFilter(_e) { return true; }
+
+  // ── Fetch Data ──
+  // Normalize company name for lookup: lowercase, strip punctuation + common suffixes
+  function normalizeCompany(name) {
+    if (!name) return '';
+    let n = name.toLowerCase().trim().replace(/[.\-&+,()®™'"]/g, ' ');
+    const suffixes = [
+      /\s+(pvt|private|public)\s+(ltd|limited)\s*$/,
+      /\s+(pvt|private|public)\s*$/,
+      /\s+(ltd|limited|llc|llp|inc|corp|corporation|gmbh|plc|pte)\s*$/,
+      /\s+(india|global|worldwide|usa|uk)\s*$/,
+      /\s+(technologies|technology|solutions|software|services|systems|consulting|consultancy|infotech|infosystems|enterprises|ventures|group|labs|lab|digital|co|company)\s*$/,
+    ];
+    let prev;
+    do { prev = n; for (const re of suffixes) n = n.replace(re, '').trim(); } while (n !== prev);
+    return n.replace(/\s+/g, ' ').trim();
+  }
+
+  function buildHighSalaryMap(companies) {
+    const map = {};
+    for (const c of companies) {
+      const names = [c.company, ...(c.companyAlias || [])];
+      for (const name of names) {
+        const key = normalizeCompany(name);
+        if (key) map[key] = { salaryLPA: c.salaryLPA, salaryMinLPA: c.salaryMinLPA, salaryMaxLPA: c.salaryMaxLPA, employee_count: c.employee_count, company_url: c.company_url || null };
+      }
+    }
+    return map;
+  }
+
+  function lookupHighSalary(companyName) {
+    return highSalaryMap[normalizeCompany(companyName)] || null;
+  }
+
+  // Build the query string from the active state for /api/feed and /api/feed/stats.
+  function feedQuery(extra = {}) {
+    const p = new URLSearchParams();
+    p.set('view', postsView ? 'posts' : 'emails');
+    if (postsView) {
+      p.set('status', postsStatusFilter || 'hiring');
+      if (daysFilter) p.set('days', daysFilter);
+      if (sortBy) p.set('sort', sortBy);
+    } else {
+      p.set('status', activeFilter || 'drafted');
+    }
+    if (jobTypeFilter) p.set('type', jobTypeFilter);
+    if (salaryFilter) p.set('minSalary', salaryFilter);
+    if (contactMethodFilter) p.set('contactMethod', contactMethodFilter);
+    if (wellKnownFilter) p.set('wellKnown', wellKnownFilter);
+    if (searchQuery) p.set('q', searchQuery);
+    p.set('limit', String(currentLimit));
+    for (const [k, v] of Object.entries(extra)) p.set(k, v);
+    return p.toString();
+  }
+
+  async function loadStats() {
+    const p = new URLSearchParams();
+    p.set('view', postsView ? 'posts' : 'emails');
+    const r = await fetch(`/feed/api/feed/stats?${p.toString()}`);
+    currentStats = await r.json();
+  }
+
+  // Hide posts this tab has already skipped, and retire tombstones once the
+  // server has caught up. Only applies where the view excludes skipped posts —
+  // on the All / Skipped tabs a skipped post legitimately belongs on screen.
+  function applyLocalSkips(items) {
+    if (!skippedLocally.size) return items;
+    const active = POSTS_PAGE && postsStatusFilter === 'hiring';
+    const now = Date.now();
+    const seenAsHiring = new Set();
+    const out = active
+      ? items.filter((p) => {
+          if (!skippedLocally.has(p.postId)) return true;
+          if (p.status !== 'skipped') seenAsHiring.add(p.postId);
+          return false;
+        })
+      : items;
+    for (const [id, t] of [...skippedLocally]) {
+      // Absent from the payload could mean "server agrees" or "not on this
+      // page", so age it out rather than trusting a single response.
+      if (!seenAsHiring.has(id) && now - t > MIN_TOMBSTONE_MS) skippedLocally.delete(id);
+    }
+    return out;
+  }
+
+  async function loadFeed() {
+    const seq = ++feedSeq;
+    const r = await fetch(`/feed/api/feed?${feedQuery()}`);
+    const data = await r.json();
+    if (seq !== feedSeq) return; // stale
+    currentItems = applyLocalSkips(data.items || []);
+    currentTotals = {
+      totalFiltered: data.totalFiltered ?? currentItems.length,
+      totalFilteredPosts: data.totalFilteredPosts ?? null,
+    };
+    renderCards();
+    renderLoadMore();
+  }
+
+  function resetPagination() {
+    currentLimit = PAGE_SIZE;
+  }
+
+  function renderLoadMore() {
+    const wrap = document.getElementById('loadMoreWrap');
+    const btn = document.getElementById('loadMoreBtn');
+    if (!wrap || !btn) return;
+    const total = currentTotals.totalFiltered || 0;
+    const shown = currentItems.length;
+    if (shown < total) {
+      const remaining = total - shown;
+      const next = Math.min(PAGE_SIZE, remaining);
+      btn.textContent = `Load ${next} more (${remaining} remaining)`;
+      btn.disabled = false;
+      wrap.style.display = '';
+    } else {
+      wrap.style.display = 'none';
+    }
+  }
+
+  async function loadHighSalary() {
+    const res = await fetch('/feed/api/high-salary');
+    const json = await res.json();
+    highSalaryMap = buildHighSalaryMap(json.companies || []);
+  }
+
+  async function fetchData() {
+    // Initial load: pull lookups + counts in parallel, then the first page of items.
+    await Promise.all([loadHighSalary(), loadStats()]);
+    await loadFeed();
+  }
+
+  // ── Render Stats ──
+  // Stats come from /api/feed/stats — independent of filter chips.
+  function renderStats() {
+    const s = currentStats || {};
+    if (postsView) {
+      document.getElementById('stats').innerHTML = `
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--accent)">${s.total || 0}</div>
+          <div class="stat-label">Total Posts</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--green)">${s.hiring || 0}</div>
+          <div class="stat-label">Hiring</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--red)">${s.skipped || 0}</div>
+          <div class="stat-label">Skipped</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--cyan)">${s.withEmail || 0}</div>
+          <div class="stat-label">Has Email</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--purple, #a78bfa)">${s.withLink || 0}</div>
+          <div class="stat-label">Has Link</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--yellow)">${s.dmOnly || 0}</div>
+          <div class="stat-label">DM Only</div>
+        </div>
+      `;
+      document.getElementById('subtitle').textContent = `${s.total || 0} posts in the pool`;
+      return;
+    }
+
+    const avg = s.avgScore ? Number(s.avgScore).toFixed(1) : '0';
+    document.getElementById('stats').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-number" style="color:var(--accent)">${s.total || 0}</div>
+        <div class="stat-label">Total Emails</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color:var(--pink)">${s.drafted || 0}</div>
+        <div class="stat-label">Drafted</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color:var(--cyan)">${s.approved || 0}</div>
+        <div class="stat-label">Approved</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color:var(--green)">${s.sent || 0}</div>
+        <div class="stat-label">Sent</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color:var(--red)">${s.rejected || 0}</div>
+        <div class="stat-label">Rejected</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color:var(--yellow)">${avg}</div>
+        <div class="stat-label">Avg Score</div>
+      </div>
+    `;
+
+    document.getElementById('subtitle').textContent = `${s.total || 0} email drafts`;
+  }
+
+  // ── Render Cards ──
+  function matchesPostFilter(_p) { return true; }
+
+  // ── Render post card ──
+  // The pool itself carries no score — the server attaches the viewer's own
+  // score from user_emails, so it is absent for posts they haven't scored yet.
+  function scoreBadge(score) {
+    if (score == null || !Number.isFinite(Number(score))) return '';
+    const s = Number(score);
+    const [bg, fg, br] = s >= 8 ? ['var(--green-dim)', 'var(--green)', '#34d39944']
+      : s >= 5 ? ['var(--yellow-dim)', 'var(--yellow)', '#fbbf2444']
+      : ['var(--red-dim)', 'var(--red)', '#f8717144'];
+    return `<span class="badge" title="Your match score" style="background:${bg};color:${fg};border:1px solid ${br}">${s}/10</span>`;
+  }
+
+  // Years of experience the post asks for. Absent on ~a third of posts, which
+  // is a real state ("not stated"), not a zero — so render nothing rather than
+  // implying the role is open to freshers.
+  function expBadge(years) {
+    if (!Number.isFinite(Number(years))) return '';
+    const y = Number(years);
+    // Reachable band is judged against the candidate, same line the code
+    // scorer draws: comfortably in reach / a stretch / out of range.
+    const [bg, fg, br] = y <= 3 ? ['var(--green-dim)', 'var(--green)', '#34d39944']
+      : y <= 6 ? ['var(--yellow-dim)', 'var(--yellow)', '#fbbf2444']
+      : ['var(--red-dim)', 'var(--red)', '#f8717144'];
+    const label = y === 0 ? 'fresher' : `${y}+ yr`;
+    return `<span class="badge" title="Experience the post asks for" style="background:${bg};color:${fg};border:1px solid ${br}">${escapeHtml(label)}</span>`;
+  }
+
+  // The whole point of this line is to make a post rejectable WITHOUT opening
+  // it, so it lives in the collapsed header. Missing skills come first and in
+  // full — that is the reject signal. Matched ones are a trailing count, since
+  // "you have 4 of these" needs no detail to act on.
+  function gapLine(skills) {
+    if (!skills || (!skills.have?.length && !skills.missing?.length)) return '';
+    const missing = skills.missing || [];
+    const have = skills.have || [];
+    const parts = [];
+    if (missing.length) {
+      parts.push(`<span style="color:var(--red)">missing ${missing.map(escapeHtml).join(', ')}</span>`);
+    }
+    if (have.length) {
+      parts.push(`<span style="color:var(--green)">has ${have.length}</span>`);
+    }
+    return `<div class="reason" style="margin-top:3px;font-size:0.78rem">${parts.join('<span style="color:var(--ink-4)"> · </span>')}</div>`;
+  }
+
+  // Requirement chips, coloured by whether the viewer can claim each one.
+  // Reads the same `skills` split the collapsed gap line uses, so the expanded
+  // view can never contradict the one-liner that prompted the click.
+  function reqTags(reqs, skills) {
+    const missing = new Set(skills?.missing || []);
+    const have = new Set(skills?.have || []);
+    return reqs.map((r) => {
+      const style = missing.has(r) ? 'background:var(--red-dim);color:var(--red);border-color:#f8717144'
+        : have.has(r) ? 'background:var(--green-dim);color:var(--green);border-color:#34d39944'
+        : '';
+      const title = missing.has(r) ? 'not on your profile' : have.has(r) ? 'on your profile' : '';
+      return `<span class="req-tag" style="${style}" title="${title}">${escapeHtml(r)}</span>`;
+    }).join('');
+  }
+
+  function renderPostCard(p) {
+    const isSkipped = p.status === 'skipped';
+    const reqs = (p.job?.requirements || []);
+    const contactEmails = (p.contacts?.emails || []);
+    const salaryLPA = p.job?.salary ? parseSalaryToLPA(p.job.salary) : null;
+    const hs = lookupHighSalary(p.job?.company);
+
+    return `
+    <div class="card${isSkipped ? ' rejected-card' : ''}" data-postid="${escapeHtml(p.postId)}">
+      <div class="card-top" onclick="toggleCard(this.parentElement)">
+        <div class="score-ring ${p.contacts?.method === 'email' ? 'score-high' : p.contacts?.method === 'link' ? 'score-mid' : 'score-low'}" style="font-size:0.65rem">${p.contacts?.method === 'email' ? 'Email' : p.contacts?.method === 'link' ? 'Link' : 'DM'}</div>
+        <div class="card-info">
+          <h3>${escapeHtml(p.poster?.name || 'Unknown')}</h3>
+          <div class="role">${escapeHtml(p.job?.title || 'Unknown Role')}${p.job?.company ? ' @ ' + escapeHtml(p.job.company) : ''}</div>
+          <div class="reason">${escapeHtml(p.summary || '').substring(0, 120)}${(p.summary || '').length > 120 ? '...' : ''}</div>
+          ${gapLine(p.skills)}
+        </div>
+        <div class="card-badges">
+          ${p.contacts?.method === 'email'
+            ? `<span class="badge" style="background:var(--green-dim);color:var(--green);border:1px solid #34d39944">Email</span>`
+            : p.contacts?.method === 'link'
+            ? `<span class="badge" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid #a78bfa44">Apply Link</span>`
+            : `<span class="badge" style="background:var(--yellow-dim);color:var(--yellow);border:1px solid #fbbf2444">DM Only</span>`}
+          ${scoreBadge(p.score)}
+          ${expBadge(p.job?.requiredExperience)}
+          ${p.poster?.degree ? `<span class="badge" title="Connection degree" style="background:rgba(148,163,184,0.12);color:#94a3b8;border:1px solid #94a3b844">${escapeHtml(p.poster.degree)}</span>` : ''}
+          ${p.job?.type ? `<span class="badge" style="background:var(--cyan-dim);color:var(--cyan);border:1px solid #22d3ee44">${escapeHtml(p.job.type)}</span>` : ''}
+          ${p.job?.salary ? `<span class="badge" style="background:var(--green-dim);color:var(--green);border:1px solid #34d39944">${escapeHtml(p.job.salary)}${salaryLPA !== null ? ' (~' + salaryLPA.toFixed(1) + ' LPA)' : ''}</span>` : ''}
+          ${hs ? `<span class="badge" title="Market salary data" style="background:rgba(251,191,36,0.12);color:#fbbf24;border:1px solid #fbbf2444">💰 ${hs.salaryLPA ? hs.salaryLPA + ' LPA' : '?'}${hs.employee_count ? ' · ' + hs.employee_count : ''}</span>` : ''}
+          ${hs?.company_url ? `<a href="${escapeHtml(hs.company_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="badge" style="background:rgba(56,189,248,0.1);color:var(--cyan);border:1px solid #22d3ee44;text-decoration:none;cursor:pointer" title="Company LinkedIn Page">🏢 Page</a>` : ''}
+          ${isSkipped
+            ? `<span class="badge" style="background:var(--red-dim);color:var(--red);border:1px solid #f8717144">Skipped</span>`
+            : `<span class="badge" style="background:var(--green-dim);color:var(--green);border:1px solid #34d39944">Hiring</span>`}
+        </div>
+        ${!isSkipped && p.connect?.done
+          ? `<span class="badge" title="LinkedIn shows the connection request as sent" style="background:var(--green-dim);color:var(--green);border:1px solid #34d39944">${p.connect.status === 'connected' || p.connect.status === 'messaged' ? 'Connected' : 'Pending'}</span>`
+          : !isSkipped && p.contacts?.method !== 'email' && p.poster?.profileUrl
+          ? `<button class="btn-approve" style="padding:4px 14px;font-size:0.75rem;white-space:nowrap" onclick="event.stopPropagation();handleConnect(event, '${escapeHtml(p.postId)}', '${escapeHtml(p.poster.profileUrl)}')" title="Open the profile and queue a connection request (no note)">Connect</button>`
+          : ''}
+        ${!isSkipped
+          ? `<button class="btn-reject" style="padding:4px 14px;font-size:0.75rem;white-space:nowrap" onclick="event.stopPropagation();handleSkipPost(event, '${escapeHtml(p.postId)}')">Skip</button>`
+          : `<button class="btn-restore" style="padding:4px 14px;font-size:0.75rem;white-space:nowrap" onclick="event.stopPropagation();handleRestorePost(event, '${escapeHtml(p.postId)}')">Restore</button>`}
+        <svg class="chevron" width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="card-detail">
+        <div class="detail-grid">
+          <div class="detail-section">
+            <h4>Job Details</h4>
+            <div class="detail-row"><span class="label">Title</span><span class="value">${escapeHtml(p.job?.title || '—')}</span></div>
+            <div class="detail-row"><span class="label">Company</span><span class="value">${escapeHtml(p.job?.company || '—')}</span></div>
+            ${p.job?.type ? `<div class="detail-row"><span class="label">Type</span><span class="value" style="color:var(--cyan)">${escapeHtml(p.job.type)}</span></div>` : ''}
+            ${p.job?.requiredExperience != null ? `<div class="detail-row"><span class="label">Experience</span><span class="value">${p.job.requiredExperience} yr</span></div>` : ''}
+            ${p.job?.salary ? `<div class="detail-row"><span class="label">Salary</span><span class="value" style="color:var(--green)">${escapeHtml(p.job.salary)}${salaryLPA !== null ? ' (~' + salaryLPA.toFixed(1) + ' LPA)' : ''}</span></div>` : ''}
+            ${hs ? `<div class="detail-row"><span class="label">Market Data</span><span class="value" style="color:#fbbf24">${hs.salaryLPA ? hs.salaryLPA + ' LPA' : '—'}${hs.employee_count ? ' · ' + hs.employee_count : ''}</span></div>` : ''}
+            ${p.job?.location ? `<div class="detail-row"><span class="label">Location</span><span class="value">${escapeHtml(p.job.location)}</span></div>` : ''}
+            <div class="detail-row"><span class="label">Poster</span><span class="value">${escapeHtml(p.poster?.headline || '—')}</span></div>
+            ${reqs.length ? `<div style="margin-top:8px"><div class="reqs">${reqTags(reqs, p.skills)}</div></div>` : ''}
+          </div>
+          <div class="detail-section">
+            <h4>Contact</h4>
+            <div class="detail-row"><span class="label">Method</span><span class="value" style="color:${p.contacts?.method === 'email' ? 'var(--green)' : p.contacts?.method === 'link' ? '#a78bfa' : 'var(--yellow)'}">${p.contacts?.method === 'email' ? 'Email' : p.contacts?.method === 'link' ? 'Apply Link' : 'DM only'}</span></div>
+            ${contactEmails.length ? `<div class="detail-row"><span class="label">Email(s)</span><span class="value" style="color:var(--cyan);font-family:JetBrains Mono,monospace;font-size:0.8rem">${contactEmails.map(e => escapeHtml(e)).join(', ')}</span></div>` : ''}
+            ${(p.contacts?.links || []).length ? `<div class="detail-row"><span class="label">Apply Link(s)</span><span class="value">${(p.contacts.links).map(l => `<a class="detail-link" href="${escapeHtml(l)}" target="_blank" rel="noopener" style="word-break:break-all;font-family:var(--mono);font-size:0.78rem">${escapeHtml(l.length > 60 ? l.substring(0, 57) + '...' : l)}</a>`).join('<br>')}</span></div>` : ''}
+            ${p.addedAt ? `<div class="detail-row"><span class="label">Added</span><span class="value">${new Date(p.addedAt).toLocaleString()}</span></div>` : ''}
+            <div class="detail-row"><span class="label">Post</span><span class="value">${postUrl(p) ? `<a class="detail-link" href="${postUrl(p)}" target="_blank" rel="noopener">View on LinkedIn</a>` : '—'}</span></div>
+            ${p.poster?.profileUrl ? `<div class="detail-row"><span class="label">Profile</span><span class="value"><a class="detail-link" href="${escapeHtml(p.poster.profileUrl)}" target="_blank" rel="noopener">${escapeHtml(p.poster.name || 'Open profile')}</a>${p.poster.degree ? `<span class="detail-link__meta"> · ${escapeHtml(p.poster.degree)}</span>` : ''}</span></div>` : ''}
+          </div>
+          ${p.summary ? `<div class="post-summary"><h4>Post Summary</h4><p>${escapeHtml(p.summary)}</p></div>` : ''}
+          ${p.postText ? `<div class="post-summary" style="grid-column:1/-1"><h4>Original Post</h4><p style="white-space:pre-wrap;font-size:0.82rem;line-height:1.55;max-height:300px;overflow-y:auto">${escapeHtml(p.postText)}</p></div>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function renderCards() {
+    // Send approved lives on /feed only (posts have nothing to send). The
+    // label reads from stats, not the current page — the approved set spans
+    // every filter chip. Left alone while a send is streaming so an
+    // SSE-driven re-render can't clobber the "Sending..." state.
+    const sendBtn = document.getElementById('sendAllBtn');
+    sendBtn.style.display = postsView ? 'none' : '';
+    if (!postsView && !sendBtn.dataset.sending) {
+      const approvedCount = currentStats?.approved || 0;
+      sendBtn.textContent = `→ Send approved (${approvedCount})`;
+      sendBtn.disabled = approvedCount === 0;
+      sendBtn.style.opacity = approvedCount === 0 ? '0.45' : '';
+    }
+
+    // Posts view — server already filtered + sorted; just render.
+    if (postsView) {
+      const totalForLabel = currentTotals.totalFiltered;
+      if (currentItems.length === 0) {
+        document.getElementById('resultsCount').textContent = `0 of ${totalForLabel} posts`;
+        document.getElementById('cards').innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">&#9788;</div>
+            <p>No posts match your filters</p>
+          </div>`;
+        return;
+      }
+      document.getElementById('resultsCount').textContent = `${currentItems.length} of ${totalForLabel} posts`;
+      document.getElementById('cards').innerHTML = currentItems.map(renderPostCard).join('');
+      restoreExpandedState();
+      return;
+    }
+
+    // Emails view — server-filtered list.
+    const emails = currentItems.slice();
+    const total = currentTotals.totalFiltered;
+
+    if (emails.length === 0) {
+      document.getElementById('resultsCount').textContent = `0 of ${total} emails`;
+      document.getElementById('cards').innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">&#9788;</div>
+          <p>No emails match your filters</p>
+        </div>`;
+      return;
+    }
+
+    // One card per email, sorted by status then score
+    const statusOrder = { drafted: 0, approved: 1, sent: 2, rejected: 3, no_email: 4 };
+    emails.sort((a, b) => {
+      const sa = statusOrder[(a.status || 'drafted')] ?? 5;
+      const sb = statusOrder[(b.status || 'drafted')] ?? 5;
+      if (sa !== sb) return sa - sb;
+      return (b.score || 0) - (a.score || 0);
+    });
+
+    document.getElementById('resultsCount').textContent = `${emails.length} of ${total} emails`;
+    document.getElementById('cards').innerHTML = emails.map(renderSingleCard).join('');
+    restoreExpandedState();
+  }
+
+  // Card for one email draft
+  function renderSingleCard(e) {
+    const status = (e.status || 'drafted').toLowerCase();
+    const isRejected = status === 'rejected';
+    const isSent = status === 'sent';
+    const isApproved = status === 'approved';
+    const hasEmail = e.email?.to && e.email.to.includes('@');
+    const reqs = (e.requirements || '').split(',').map(s => s.trim()).filter(Boolean);
+    const hsS = lookupHighSalary(e.job?.company);
+
+    return `
+    <div class="card${isRejected ? ' rejected-card' : ''}" data-postid="${escapeHtml(e.postId)}">
+      <div class="card-top" onclick="toggleCard(this.parentElement)">
+        <div class="score-ring ${scoreClass(e.score || 0)}">${e.score || 0}</div>
+        <div class="card-info">
+          <h3>${escapeHtml(e.poster?.name || 'Unknown')}</h3>
+          <div class="role">${escapeHtml(e.job?.title || 'Unknown Role')}${e.job?.company ? ' @ ' + escapeHtml(e.job.company) : ''}</div>
+          <div class="reason">${escapeHtml(e.matchReason || '')}</div>
+        </div>
+        <div class="card-badges">
+          ${e.job?.type ? `<span class="badge" style="background:var(--cyan-dim);color:var(--cyan);border:1px solid #22d3ee44">${escapeHtml(e.job.type)}</span>` : ''}
+          ${e.job?.salary ? `<span class="badge" style="background:var(--green-dim);color:var(--green);border:1px solid #34d39944">${escapeHtml(e.job.salary)}</span>` : ''}
+          ${hsS ? `<span class="badge" title="Market salary data" style="background:rgba(251,191,36,0.12);color:#fbbf24;border:1px solid #fbbf2444">💰 ${hsS.salaryLPA ? hsS.salaryLPA + ' LPA' : '?'}${hsS.employee_count ? ' · ' + hsS.employee_count : ''}</span>` : ''}
+          ${hsS?.company_url ? `<a href="${escapeHtml(hsS.company_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="badge" style="background:rgba(56,189,248,0.1);color:var(--cyan);border:1px solid #22d3ee44;text-decoration:none;cursor:pointer" title="Company LinkedIn Page">🏢 Page</a>` : ''}
+          ${e.job?.company ? `<a href="https://www.google.com/search?q=${encodeURIComponent(e.job.company + ' salaries')}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="badge" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid #fbbf2444;text-decoration:none;cursor:pointer" title="Google salary for ${escapeHtml(e.job.company)}">🔍 Salary</a>` : ''}
+          ${statusBadge(status)}
+        </div>
+        ${(!isSent) ? `
+        <div class="card-quick-actions">
+          ${(!isRejected && !isApproved) ? `<button class="btn-quick-approve" title="Approve" onclick="handleApprove(event, '${escapeHtml(e.postId)}', false)">Approve</button>` : ''}
+          ${isApproved ? `<button class="btn-quick-approve is-approved" title="Unapprove" onclick="handleApprove(event, '${escapeHtml(e.postId)}', true)">Unapprove</button>` : ''}
+          ${(!isRejected) ? `<button class="btn-quick-reject" title="Reject" onclick="handleReject(event, '${escapeHtml(e.postId)}')">Reject</button>` : ''}
+          ${isRejected ? `<button class="btn-restore" title="Restore" style="font-size:11px;padding:6px 10px" onclick="handleRestore(event, '${escapeHtml(e.postId)}')">Restore</button>` : ''}
+        </div>` : ''}
+        <svg class="chevron" width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="card-detail">
+        <div class="detail-grid">
+          <div class="detail-section">
+            <h4>Job Details</h4>
+            <div class="detail-row"><span class="label">Title</span><span class="value">${escapeHtml(e.job?.title || '—')}</span></div>
+            <div class="detail-row"><span class="label">Company</span><span class="value">${escapeHtml(e.job?.company || '—')}</span></div>
+            ${e.job?.type ? `<div class="detail-row"><span class="label">Type</span><span class="value" style="color:var(--cyan)">${escapeHtml(e.job.type)}</span></div>` : ''}
+            ${e.job?.experience ? `<div class="detail-row"><span class="label">Experience</span><span class="value">${escapeHtml(e.job.experience)} yr</span></div>` : ''}
+            ${e.job?.salary ? `<div class="detail-row"><span class="label">Salary</span><span class="value" style="color:var(--green)">${escapeHtml(e.job.salary)}</span></div>` : ''}
+            ${hsS ? `<div class="detail-row"><span class="label">Market Data</span><span class="value" style="color:#fbbf24">${hsS.salaryLPA ? hsS.salaryLPA + ' LPA' : '—'}${hsS.employee_count ? ' · ' + hsS.employee_count : ''}</span></div>` : ''}
+            <div class="detail-row"><span class="label">Poster</span><span class="value">${escapeHtml(e.poster?.headline || '—')}</span></div>
+            ${reqs.length ? `<div style="margin-top:8px"><div class="reqs">${reqs.map(r => `<span class="req-tag">${escapeHtml(r)}</span>`).join('')}</div></div>` : ''}
+          </div>
+          <div class="detail-section">
+            <h4>Status</h4>
+            <div class="detail-row"><span class="label">Status</span><span class="value">${escapeHtml(status)}</span></div>
+            ${e.approvedBy ? `<div class="detail-row"><span class="label">Approved By</span><span class="value" style="color:var(--cyan)">${escapeHtml(e.approvedBy)}</span></div>` : ''}
+            ${e.generatedAt ? `<div class="detail-row"><span class="label">Generated</span><span class="value">${new Date(e.generatedAt).toLocaleString()}</span></div>` : ''}
+            ${e.sentAt ? `<div class="detail-row"><span class="label">Sent At</span><span class="value" style="color:var(--green)">${new Date(e.sentAt).toLocaleString()}</span></div>` : ''}
+            <div class="detail-row"><span class="label">Post</span><span class="value">${postUrl(e.postId) ? `<a href="${postUrl(e.postId)}" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:none;font-family:JetBrains Mono,monospace;font-size:0.75rem" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">View on LinkedIn</a>` : '—'}</span></div>
+          </div>
+          ${e.postSummary ? `<div class="post-summary"><h4>Post Summary</h4><p>${escapeHtml(e.postSummary)}</p></div>` : ''}
+          ${renderOriginalPost(e.postText)}
+          ${hasEmail ? `
+          <div class="email-preview" data-email-postid="${escapeHtml(e.postId)}">
+            <div class="email-display">
+              <div class="email-to">To: ${escapeHtml(e.email.to)}</div>
+              <div class="email-subject">${escapeHtml(e.email.subject || '(no subject)')}</div>
+              <div class="email-body">${escapeHtml(e.email.body || '(no body)')}</div>
+            </div>
+            ${!isSent ? `<div class="email-actions" style="margin-top:14px;display:flex;align-items:center;gap:12px">
+              ${!isRejected ? `
+                <button class="btn-edit" onclick="handleEdit(event, '${escapeHtml(e.postId)}')">Edit</button>
+                <button class="btn-approve ${isApproved ? 'is-approved' : ''}" onclick="handleApprove(event, '${escapeHtml(e.postId)}', ${isApproved})">
+                  ${isApproved ? 'Unapprove' : 'Approve'}
+                </button>
+                <button class="btn-reject" onclick="handleReject(event, '${escapeHtml(e.postId)}')">Reject</button>
+              ` : `
+                <button class="btn-restore" onclick="handleRestore(event, '${escapeHtml(e.postId)}')">Restore</button>
+              `}
+            </div>` : ''}
+          </div>` : `
+          <div style="grid-column:1/-1;padding:12px 0">
+            ${!isSent && !isRejected ? `
+              <button class="btn-reject" onclick="handleReject(event, '${escapeHtml(e.postId)}')">Reject</button>
+            ` : ''}
+            ${isRejected ? `
+              <button class="btn-restore" onclick="handleRestore(event, '${escapeHtml(e.postId)}')">Restore</button>
+            ` : ''}
+          </div>`}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── In-place DOM update helpers ──
+  // The status badge is picked by its status class, not `.badge` — the
+  // type / salary / market chips share that class and come first in the row.
+  const STATUS_BADGE_SEL = '.badge-drafted, .badge-approved, .badge-sent, .badge-rejected, .badge-no-email';
+
+  function updateCardStatusInPlace(btn, postId, newStatus) {
+    const cardEl = btn.closest('.card');
+    const previewEl = btn.closest('.email-preview');
+    const now = new Date();
+
+    if (cardEl) {
+      const oldBadge = cardEl.querySelector('.card-top .card-badges')?.querySelector(STATUS_BADGE_SEL);
+      if (oldBadge) oldBadge.outerHTML = statusBadge(newStatus);
+      // Update rejected-card opacity
+      if (newStatus === 'rejected') cardEl.classList.add('rejected-card');
+      else cardEl.classList.remove('rejected-card');
+    }
+
+    // Rebuild the action area
+    const actionDiv = btn.closest('.email-actions');
+    if (!actionDiv) return;
+
+    const ep = escapeHtml(postId);
+
+    // Check if this email preview has an email (to show Edit button)
+    const hasEditBtn = previewEl && previewEl.querySelector('.email-display');
+
+    if (newStatus === 'approved') {
+      actionDiv.innerHTML = `
+        ${hasEditBtn ? `<button class="btn-edit" onclick="handleEdit(event, '${ep}')">Edit</button>` : ''}
+        <button class="btn-approve is-approved" onclick="handleApprove(event, '${ep}', true)">Unapprove</button>
+        <button class="btn-reject" onclick="handleReject(event, '${ep}')">Reject</button>
+        <span style="color:var(--cyan);font-size:0.75rem;margin-left:auto;font-family:JetBrains Mono,monospace">Approved: ${now.toLocaleString()}</span>
+      `;
+    } else if (newStatus === 'rejected') {
+      actionDiv.innerHTML = `
+        <button class="btn-restore" onclick="handleRestore(event, '${ep}')">Restore</button>
+        <span style="color:var(--red);font-size:0.75rem;margin-left:auto;font-family:JetBrains Mono,monospace">Rejected: ${now.toLocaleString()}</span>
+      `;
+    } else {
+      // drafted
+      actionDiv.innerHTML = `
+        ${hasEditBtn ? `<button class="btn-edit" onclick="handleEdit(event, '${ep}')">Edit</button>` : ''}
+        <button class="btn-approve" onclick="handleApprove(event, '${ep}', false)">Approve</button>
+        <button class="btn-reject" onclick="handleReject(event, '${ep}')">Reject</button>
+      `;
+    }
+  }
+
+  // ── API Actions ──
+  window.handleApprove = async function(event, postId, isCurrentlyApproved) {
+    event.stopPropagation();
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+      const endpoint = isCurrentlyApproved ? '/feed/api/unapprove' : '/feed/api/approve';
+      const body = isCurrentlyApproved
+        ? { postId }
+        : { postId, approvedBy: 'Dashboard' };
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const newStatus = isCurrentlyApproved ? 'drafted' : 'approved';
+
+      // Local optimistic update on the server-fetched list — keeps the card in place.
+      const emailObj = currentItems.find(e => e.postId === postId);
+      if (emailObj) {
+        emailObj.status = newStatus;
+        emailObj.approvedBy = isCurrentlyApproved ? '' : 'Dashboard';
+      }
+
+      // Stat cards reflect the move; refetch in background.
+      loadStats().then(renderStats);
+
+      // In-place card update
+      updateCardStatusInPlace(btn, postId, newStatus);
+    } catch (err) {
+      alert('Failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = isCurrentlyApproved ? 'Unapprove' : 'Approve';
+    }
+  };
+
+  window.handleReject = async function(event, postId) {
+    event.stopPropagation();
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+      const res = await fetch('/feed/api/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const emailObj = currentItems.find(e => e.postId === postId);
+      if (emailObj) {
+        emailObj.status = 'rejected';
+        emailObj.approvedBy = '';
+      }
+
+      loadStats().then(renderStats);
+
+      // In-place card update
+      updateCardStatusInPlace(btn, postId, 'rejected');
+    } catch (err) {
+      alert('Failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Reject';
+    }
+  };
+
+  window.handleRestore = async function(event, postId) {
+    event.stopPropagation();
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+      const res = await fetch('/feed/api/unapprove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const emailObj = currentItems.find(e => e.postId === postId);
+      if (emailObj) {
+        emailObj.status = 'drafted';
+        emailObj.approvedBy = '';
+      }
+
+      loadStats().then(renderStats);
+
+      // In-place card update
+      updateCardStatusInPlace(btn, postId, 'drafted');
+    } catch (err) {
+      alert('Failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Restore';
+    }
+  };
+
+  // ── Edit Email ──
+  window.handleEdit = function(event, postId) {
+    event.stopPropagation();
+    const previewEl = event.target.closest('.email-preview');
+    if (!previewEl) return;
+
+    const emailObj = currentItems.find(e => e.postId === postId);
+    if (!emailObj || !emailObj.email) return;
+
+    const displayEl = previewEl.querySelector('.email-display');
+    if (!displayEl) return;
+
+    // Hide the display and show edit form
+    displayEl.style.display = 'none';
+
+    // Hide action buttons while editing
+    const actionDiv = previewEl.querySelector('.email-actions');
+    if (actionDiv) actionDiv.style.display = 'none';
+
+    const editForm = document.createElement('div');
+    editForm.className = 'edit-form';
+    editForm.innerHTML = `
+      <label>Subject</label>
+      <input type="text" class="edit-subject" value="${escapeHtml(emailObj.email.subject || '')}">
+      <label>Body</label>
+      <textarea class="edit-body">${escapeHtml(emailObj.email.body || '')}</textarea>
+      <div class="edit-actions">
+        <button class="btn-save" onclick="handleSaveEdit(event, '${escapeHtml(postId)}')">Save</button>
+        <button class="btn-cancel-edit" onclick="handleCancelEdit(event)">Cancel</button>
+      </div>
+    `;
+    displayEl.insertAdjacentElement('afterend', editForm);
+  };
+
+  window.handleCancelEdit = function(event) {
+    event.stopPropagation();
+    const editForm = event.target.closest('.edit-form');
+    const previewEl = editForm.closest('.email-preview');
+    const displayEl = previewEl.querySelector('.email-display');
+    const actionDiv = previewEl.querySelector('.email-actions');
+
+    editForm.remove();
+    displayEl.style.display = '';
+    if (actionDiv) actionDiv.style.display = '';
+  };
+
+  window.handleSaveEdit = async function(event, postId) {
+    event.stopPropagation();
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    const editForm = btn.closest('.edit-form');
+    const subject = editForm.querySelector('.edit-subject').value;
+    const body = editForm.querySelector('.edit-body').value;
+
+    try {
+      const res = await fetch('/feed/api/emails/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, subject, body }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Update local state (preserve existing status and approval)
+      const emailObj = currentItems.find(e => e.postId === postId);
+      if (emailObj) {
+        emailObj.email.subject = subject;
+        emailObj.email.body = body;
+      }
+
+      // Update the display with new content
+      const previewEl = editForm.closest('.email-preview');
+      const displayEl = previewEl.querySelector('.email-display');
+      displayEl.querySelector('.email-subject').textContent = subject || '(no subject)';
+      displayEl.querySelector('.email-body').textContent = body || '(no body)';
+
+      // Remove edit form, show display and action buttons
+      editForm.remove();
+      displayEl.style.display = '';
+      const actionDiv = previewEl.querySelector('.email-actions');
+      if (actionDiv) actionDiv.style.display = '';
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Save';
+    }
+  };
+
+  // ── Post Actions ──
+  // Queue a connection request. LinkedIn has no API for sending one, so the
+  // profile opens in a new tab for the operator to click Connect there; this
+  // records our side of it. The tab is opened FIRST, synchronously inside the
+  // click, or the popup blocker eats it once an await has run.
+  window.handleConnect = async function(event, postId, profileUrl) {
+    event.stopPropagation();
+    const btn = event.target;
+    window.open(profileUrl, '_blank', 'noopener');
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+      const res = await fetch('/feed/api/connects/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'invite failed');
+      if (data.failed?.length) throw new Error(data.failed[0].error);
+      btn.textContent = 'Queued';
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Connect';
+      alert('Failed: ' + err.message);
+    }
+  };
+
+  // Open the top N connectable profiles at once and queue them all as invited.
+  //
+  // The first tab opens synchronously inside the click so the popup blocker
+  // accepts it; the rest are staggered, because Chrome silently drops a burst
+  // of window.open calls from one gesture. Same approach the daily-routine
+  // button in nav.js uses.
+  async function handleBulkConnect() {
+    const btn = document.getElementById('bulkConnectBtn');
+    const targets = currentItems
+      .filter(p => p.status !== 'skipped' && p.contacts?.method !== 'email' && p.poster?.profileUrl)
+      .slice(0, BULK_OPEN_N);
+
+    if (!targets.length) {
+      alert('No connectable posts in view — switch Contacts to "DM · has profile".');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = `Opening ${targets.length}…`;
+
+    window.open(targets[0].poster.profileUrl, '_blank', 'noopener');
+    targets.slice(1).forEach((p, i) => {
+      setTimeout(() => window.open(p.poster.profileUrl, '_blank', 'noopener'), 400 + i * 350);
+    });
+
+    // Record all of them in one round trip. If this fails the tabs are still
+    // open, so say so rather than leaving the operator to guess.
+    try {
+      const res = await fetch('/feed/api/connects/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds: targets.map(p => p.postId) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'invite failed');
+      btn.textContent = `Queued ${data.saved}`;
+      if (data.failed?.length) console.warn('bulk connect partial failure', data.failed);
+    } catch (err) {
+      btn.textContent = `Open top ${BULK_OPEN_N}`;
+      alert('Tabs opened, but queueing failed: ' + err.message);
+    }
+    setTimeout(() => { btn.disabled = false; btn.textContent = `Open top ${BULK_OPEN_N}`; }, 2500);
+  }
+
+  // Auto-connect: queue the visible connectable posts as invited, then hand
+  // their profile URLs to the extension. It opens each profile in a
+  // background tab, clicks Connect (top card, else the More menu) and "Send
+  // without a note", reports the outcome to the server and closes the tab;
+  // the connects rows update and this page refetches over SSE. Queue first,
+  // then hand over, so a fast result can't arrive before its row exists.
+  async function handleAutoConnect() {
+    const btn = document.getElementById('autoConnectBtn');
+    const targets = connectableNow();
+    if (!targets.length) {
+      alert('No connectable posts in view — switch Contacts to "DM · has profile".');
+      return;
+    }
+    if (!confirm(`Send connection requests (no note) to ${targets.length} profile(s)? The extension opens each profile in turn and clicks Connect for you — watch the tab it opens.`)) return;
+
+    const reset = () => { btn.disabled = false; btn.textContent = `Auto-connect (${connectableNow().length})`; };
+    btn.disabled = true;
+    btn.textContent = 'Queueing…';
+    try {
+      const res = await fetch('/feed/api/connects/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds: targets.map(p => p.postId) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'invite failed');
+    } catch (err) {
+      reset();
+      alert('Could not queue the invites: ' + err.message);
+      return;
+    }
+
+    btn.textContent = 'Handing to extension…';
+    const ack = new Promise((resolve) => {
+      const onMsg = (e) => {
+        if (e.source !== window || e.data?.type !== 'forge:auto-connect:ack') return;
+        window.removeEventListener('message', onMsg);
+        resolve(e.data);
+      };
+      window.addEventListener('message', onMsg);
+      setTimeout(() => { window.removeEventListener('message', onMsg); resolve(null); }, 2500);
+    });
+    window.postMessage({
+      type: 'forge:auto-connect',
+      items: targets.map(p => ({ postId: p.postId, profileUrl: p.poster.profileUrl })),
+    }, '*');
+    const reply = await ack;
+    if (!reply?.ok) {
+      reset();
+      alert(reply?.error
+        ? `The extension reported an error: ${reply.error}`
+        : 'The Job Scanner extension did not answer. Check it is installed and reloaded (chrome://extensions) and that this tab was opened after that, then try again — or use "Open top 5" and click Connect yourself.');
+      return;
+    }
+    btn.textContent = `Connecting ${reply.queued}… (watch the tabs)`;
+    setTimeout(reset, 8000);
+  }
+
+  // Stat cards after a skip. Coalesced, because triaging is a burst
+  // activity — 20 skips in 10 seconds should cost two refreshes, not 20
+  // API calls and 20 re-renders fighting each other.
+  let _countsTimer = null;
+  function scheduleCountsRefresh() {
+    clearTimeout(_countsTimer);
+    _countsTimer = setTimeout(() => {
+      loadStats().then(renderStats);
+    }, 600);
+  }
+
+  window.handleSkipPost = async function(event, postId) {
+    event.stopPropagation();
+
+    const idx = currentItems.findIndex(p => p.postId === postId);
+    if (idx === -1) return;
+    const removed = currentItems[idx];
+
+    // Optimistic: the card goes NOW, the request follows. Waiting on a ~200ms
+    // round trip before the card moves made rapid triage feel broken.
+    //
+    // Two things are deliberate here. The DOM node is removed directly rather
+    // than via renderCards(), because re-rendering 200 cards' innerHTML per
+    // click is a bigger cost than the API call was. And the item only leaves
+    // the list when the current filter excludes skipped posts — on the All or
+    // Skipped tabs a skipped post still belongs on screen, so there it just
+    // restyles, exactly as before.
+    const dropsOutOfView = postsStatusFilter === 'hiring';
+    const card = document.querySelector(`#cards .card[data-postid="${CSS.escape(postId)}"]`);
+
+    if (dropsOutOfView) {
+      const nextCard = card?.nextElementSibling;
+      currentItems.splice(idx, 1);
+      if (Number.isFinite(currentTotals.totalFiltered)) currentTotals.totalFiltered -= 1;
+      expandedCards.delete(postId);
+      skippedLocally.set(postId, Date.now());
+      card?.remove();
+      // The next card has taken this one's slot, so it is the one to open.
+      if (autoExpandNext && nextCard?.classList.contains('card')) {
+        nextCard.classList.add('expanded');
+        expandedCards.add(cardKey(nextCard));
+      }
+      const label = document.getElementById('resultsCount');
+      if (label) label.textContent = `${currentItems.length} of ${currentTotals.totalFiltered} posts`;
+    } else {
+      removed.status = 'skipped';
+      card?.classList.add('rejected-card');
+    }
+
+    try {
+      const res = await fetch('/feed/api/posts/skip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      scheduleCountsRefresh();
+    } catch (err) {
+      // Put it back. Other skips may have landed meanwhile, so clamp the index
+      // rather than trusting the one we captured.
+      if (dropsOutOfView) {
+        skippedLocally.delete(postId);
+        currentItems.splice(Math.min(idx, currentItems.length), 0, removed);
+        if (Number.isFinite(currentTotals.totalFiltered)) currentTotals.totalFiltered += 1;
+      } else {
+        removed.status = 'hiring';
+      }
+      renderCards();
+      alert('Skip failed, post restored: ' + err.message);
+    }
+  };
+
+  window.handleRestorePost = async function(event, postId) {
+    event.stopPropagation();
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+      const res = await fetch('/feed/api/posts/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const post = currentItems.find(p => p.postId === postId);
+      if (post) post.status = 'hiring';
+
+      loadStats().then(renderStats);
+      renderCards();
+    } catch (err) {
+      alert('Failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Restore Post';
+    }
+  };
+
+  // ── Skip All Visible Posts ──
+  window.handleSkipAll = async function() {
+    const visiblePosts = currentItems.filter(p => p.status !== 'skipped');
+    if (visiblePosts.length === 0) {
+      alert('No visible hiring posts to skip.');
+      return;
+    }
+    if (!confirm(`Skip all ${visiblePosts.length} visible hiring posts?`)) return;
+
+    const btn = document.getElementById('skipAllBtn');
+    btn.disabled = true;
+    btn.textContent = 'Skipping...';
+
+    const postIds = visiblePosts.map(p => p.postId);
+    let failed = 0;
+    try {
+      const res = await fetch('/feed/api/posts/skip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) failed = postIds.length;
+      else failed = (data.failed || []).length;
+    } catch {
+      failed = postIds.length;
+    }
+
+    if (failed > 0) alert(`${failed} post(s) failed to skip.`);
+
+    btn.disabled = false;
+    btn.textContent = 'Skip All Visible';
+    await loadStats();
+    renderStats();
+    await loadFeed();
+  };
+
+  // ── Render Filters ──
+  function renderFilters() {
+    const filtersEl = document.getElementById('filters');
+    if (postsView) {
+      filtersEl.innerHTML = `
+        <button class="filter-btn ${postsStatusFilter === 'all' ? 'active' : ''}" data-pfilter="all">All</button>
+        <button class="filter-btn ${postsStatusFilter === 'hiring' ? 'active' : ''}" data-pfilter="hiring">Hiring</button>
+        <button class="filter-btn ${postsStatusFilter === 'skipped' ? 'active' : ''}" data-pfilter="skipped">Skipped</button>
+        <select class="search-box" id="daysFilter" style="flex:0;min-width:130px;cursor:pointer">
+          <option value="1" ${daysFilter==='1'?'selected':''}>Last 24 hours</option>
+          <option value="7" ${daysFilter==='7'?'selected':''}>Last 7 days</option>
+          <option value="30" ${daysFilter==='30'?'selected':''}>Last 30 days</option>
+          <option value="" ${daysFilter===''?'selected':''}>All time</option>
+        </select>
+        <select class="search-box" id="contactMethodFilter" style="flex:0;min-width:140px;cursor:pointer">
+          <option value="">All Contacts</option>
+          <option value="email" ${contactMethodFilter==='email'?'selected':''}>Email Only</option>
+          <option value="link" ${contactMethodFilter==='link'?'selected':''}>Link Only</option>
+          <option value="dm" ${contactMethodFilter==='dm'?'selected':''}>DM · has profile</option>
+        </select>
+        <select class="search-box" id="jobTypeFilter" style="flex:0;min-width:130px;cursor:pointer">
+          <option value="">All Types</option>
+          <option value="full-time" ${jobTypeFilter==='full-time'?'selected':''}>Full-time</option>
+          <option value="contract" ${jobTypeFilter==='contract'?'selected':''}>Contract</option>
+          <option value="intern" ${jobTypeFilter==='intern'?'selected':''}>Intern</option>
+          <option value="remote" ${jobTypeFilter==='remote'?'selected':''}>Remote</option>
+        </select>
+        <select class="search-box" id="salaryFilter" style="flex:0;min-width:140px;cursor:pointer">
+          <option value="">All Salaries</option>
+          <option value="6" ${salaryFilter==='6'?'selected':''}>6+ LPA</option>
+          <option value="10" ${salaryFilter==='10'?'selected':''}>10+ LPA</option>
+          <option value="15" ${salaryFilter==='15'?'selected':''}>15+ LPA</option>
+          <option value="unknown" ${salaryFilter==='unknown'?'selected':''}>Not mentioned</option>
+        </select>
+        <select class="search-box" id="wellKnownFilter" style="flex:0;min-width:150px;cursor:pointer">
+          <option value="">All Companies</option>
+          <option value="yes" ${wellKnownFilter==='yes'?'selected':''}>Well-known Only</option>
+          <option value="no" ${wellKnownFilter==='no'?'selected':''}>Unknown Only</option>
+        </select>
+        <select class="search-box" id="sortBy" style="flex:0;min-width:150px;cursor:pointer">
+          <option value="recent" ${sortBy==='recent'?'selected':''}>Newest first</option>
+          <option value="score" ${sortBy==='score'?'selected':''}>Best match first</option>
+          <option value="scoreAsc" ${sortBy==='scoreAsc'?'selected':''}>Worst match first</option>
+          <option value="exp" ${sortBy==='exp'?'selected':''}>Experience: low first</option>
+          <option value="expDesc" ${sortBy==='expDesc'?'selected':''}>Experience: high first</option>
+        </select>
+        <input type="text" class="search-box" id="search" placeholder="Search by name, role, company..." value="${escapeHtml(searchQuery)}">
+        <label id="autoExpandWrap" title="Skipping the top post opens the one that replaces it"
+               style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font:500 12px/1 var(--sans);color:var(--ink-2)">
+          <input type="checkbox" id="autoExpandNext" ${autoExpandNext?'checked':''} style="cursor:pointer;accent-color:var(--gold)">
+          auto-expand next
+        </label>
+        <button class="btn-skip-all" id="bulkConnectBtn" style="background:var(--gold-soft);border-color:var(--gold-line);color:var(--gold)"
+                title="Open the top ${BULK_OPEN_N} profiles in tabs and queue each as invited">Open top ${BULK_OPEN_N}</button>
+        <button class="btn-skip-all" id="autoConnectBtn" style="background:var(--gold-soft);border-color:var(--gold-line);color:var(--gold)"
+                title="The extension opens each visible profile not yet sent, one at a time 4–5 s apart, clicks Connect (top card or the More menu) and 'Send without a note', then closes the tab">Auto-connect (${connectableNow().length})</button>
+        <button class="btn-skip-all" id="skipAllBtn">Skip All Visible</button>
+      `;
+      filtersEl.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          filtersEl.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          postsStatusFilter = btn.dataset.pfilter;
+          resetPagination();
+          loadFeed();
+        });
+      });
+    } else {
+      filtersEl.innerHTML = `
+        <button class="filter-btn ${activeFilter==='all'?'active':''}" data-filter="all">All</button>
+        <button class="filter-btn ${activeFilter==='drafted'?'active':''}" data-filter="drafted">Drafted</button>
+        <button class="filter-btn ${activeFilter==='approved'?'active':''}" data-filter="approved">Approved</button>
+        <button class="filter-btn ${activeFilter==='sent'?'active':''}" data-filter="sent">Sent</button>
+        <button class="filter-btn ${activeFilter==='rejected'?'active':''}" data-filter="rejected">Rejected</button>
+        <select class="search-box" id="contactMethodFilter" style="flex:0;min-width:140px;cursor:pointer">
+          <option value="">All Contacts</option>
+          <option value="email" ${contactMethodFilter==='email'?'selected':''}>Email Only</option>
+          <option value="link" ${contactMethodFilter==='link'?'selected':''}>Link Only</option>
+          <option value="dm" ${contactMethodFilter==='dm'?'selected':''}>DM Only</option>
+        </select>
+        <select class="search-box" id="jobTypeFilter" style="flex:0;min-width:130px;cursor:pointer">
+          <option value="">All Types</option>
+          <option value="full-time" ${jobTypeFilter==='full-time'?'selected':''}>Full-time</option>
+          <option value="contract" ${jobTypeFilter==='contract'?'selected':''}>Contract</option>
+          <option value="intern" ${jobTypeFilter==='intern'?'selected':''}>Intern</option>
+          <option value="remote" ${jobTypeFilter==='remote'?'selected':''}>Remote</option>
+        </select>
+        <select class="search-box" id="salaryFilter" style="flex:0;min-width:140px;cursor:pointer">
+          <option value="">All Salaries</option>
+          <option value="6" ${salaryFilter==='6'?'selected':''}>6+ LPA</option>
+          <option value="10" ${salaryFilter==='10'?'selected':''}>10+ LPA</option>
+          <option value="15" ${salaryFilter==='15'?'selected':''}>15+ LPA</option>
+          <option value="unknown" ${salaryFilter==='unknown'?'selected':''}>Not mentioned</option>
+        </select>
+        <select class="search-box" id="wellKnownFilter" style="flex:0;min-width:150px;cursor:pointer">
+          <option value="">All Companies</option>
+          <option value="yes" ${wellKnownFilter==='yes'?'selected':''}>Well-known Only</option>
+          <option value="no" ${wellKnownFilter==='no'?'selected':''}>Unknown Only</option>
+        </select>
+        <input type="text" class="search-box" id="search" placeholder="Search by name, role, company, email..." value="${escapeHtml(searchQuery)}">
+      `;
+      filtersEl.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          filtersEl.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeFilter = btn.dataset.filter;
+          resetPagination();
+          loadFeed();
+        });
+      });
+    }
+    // Shared filter listeners — search debounced; selects fire immediately. Each resets pagination.
+    document.getElementById('search').addEventListener('input', (e) => {
+      searchQuery = e.target.value;
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => { resetPagination(); loadFeed(); }, 300);
+    });
+    document.getElementById('jobTypeFilter').addEventListener('change', (e) => { jobTypeFilter = e.target.value; resetPagination(); loadFeed(); });
+    document.getElementById('salaryFilter').addEventListener('change', (e) => { salaryFilter = e.target.value; resetPagination(); loadFeed(); });
+    document.getElementById('contactMethodFilter').addEventListener('change', (e) => { contactMethodFilter = e.target.value; resetPagination(); loadFeed(); });
+    // Posts view only — absent on /feed, so guard rather than assume.
+    document.getElementById('daysFilter')?.addEventListener('change', (e) => { daysFilter = e.target.value; resetPagination(); loadFeed(); });
+    document.getElementById('sortBy')?.addEventListener('change', (e) => { sortBy = e.target.value; resetPagination(); loadFeed(); });
+    document.getElementById('autoExpandNext')?.addEventListener('change', (e) => {
+      autoExpandNext = e.target.checked;
+      localStorage.setItem('posts.autoExpandNextOnSkip', autoExpandNext ? '1' : '0');
+    });
+    document.getElementById('bulkConnectBtn')?.addEventListener('click', handleBulkConnect);
+    document.getElementById('autoConnectBtn')?.addEventListener('click', handleAutoConnect);
+    document.getElementById('wellKnownFilter').addEventListener('change', (e) => { wellKnownFilter = e.target.value; resetPagination(); loadFeed(); });
+
+    // Skip All button (posts view only)
+    const skipAllBtn = document.getElementById('skipAllBtn');
+    if (skipAllBtn) {
+      skipAllBtn.addEventListener('click', handleSkipAll);
+    }
+  }
+
+  // Refresh button — also reused by the SSE live-update channel below.
+  const refreshAll = async () => {
+    const btn = document.getElementById('refreshBtn');
+    btn?.classList.add('spinning');
+    try {
+      await fetchData();
+      renderFilters();
+      renderStats();
+      renderCards();
+    } catch (err) {
+      console.warn('Refresh failed:', err.message);
+    } finally {
+      btn?.classList.remove('spinning');
+    }
+  };
+  document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+
+  // Server-Sent Events: when the mirror picks up a change (local write
+  // or cross-server delta), refresh the relevant view. Debounced so a
+  // burst of writes (bulk import, batch approve) maps to one refetch.
+  let _sseTimer = null;
+  const scheduleSseRefresh = () => {
+    clearTimeout(_sseTimer);
+    _sseTimer = setTimeout(() => refreshAll(), 600);
+  };
+  try {
+    const es = new EventSource('/api/events');
+    es.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        // Feed page cares about user_emails (the drafts/approved/sent
+        // list) and posts (the shared post pool). Ignore the rest.
+        if (d.collection === 'user_emails' || d.collection === 'posts' || d.collection === 'user_connects') {
+          scheduleSseRefresh();
+        }
+      } catch {}
+    };
+    es.onerror = () => { /* browser auto-reconnects */ };
+  } catch { /* SSE unsupported — manual refresh button still works */ }
+
+  // Send approved button — sends every approved+unsent email through the
+  // SMTP settings stored on your user doc (Settings page).
+  document.getElementById('sendAllBtn').addEventListener('click', () => {
+    // Use stats (counts the whole approved set) rather than currentItems
+    // (which is filtered by the active chip and only the current page).
+    const approvedCount = currentStats?.approved || 0;
+    if (approvedCount === 0) {
+      alert('No approved unsent emails.');
+      return;
+    }
+    if (!confirm(`Send ${approvedCount} approved email(s)? This starts sending immediately using the SMTP settings under Settings.`)) return;
+
+    const btn = document.getElementById('sendAllBtn');
+    const panel = document.getElementById('sendPanel');
+    const log = document.getElementById('sendLog');
+
+    btn.disabled = true;
+    btn.dataset.sending = '1';
+    btn.textContent = 'Sending...';
+    panel.classList.add('visible');
+    log.innerHTML = '<p>Starting email sender...</p>';
+
+    // Clears the in-flight flag so the next renderCards() restores the label.
+    const finish = () => { delete btn.dataset.sending; btn.disabled = false; };
+
+    fetch('/feed/api/send-emails', { method: 'POST' }).then(response => {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      function read() {
+        reader.read().then(({ done, value }) => {
+          if (done) {
+            finish();
+            renderCards();
+            fetchData().then(() => { renderStats(); renderCards(); });
+            return;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.message) {
+                  const p = document.createElement('p');
+                  p.textContent = data.message;
+                  log.appendChild(p);
+                  log.scrollTop = log.scrollHeight;
+                }
+              } catch {}
+            }
+          }
+          read();
+        });
+      }
+      read();
+    }).catch(err => {
+      log.innerHTML += `<p style="color:var(--red)">Error: ${err.message}</p>`;
+      finish();
+      renderCards();
+    });
+  });
+
+  document.getElementById('sendPanelMinimize').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('sendPanel').classList.add('minimized');
+    document.getElementById('sendPanelMinimize').style.display = 'none';
+    document.getElementById('sendPanelMaximize').style.display = '';
+  });
+
+  document.getElementById('sendPanelMaximize').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('sendPanel').classList.remove('minimized');
+    document.getElementById('sendPanelMaximize').style.display = 'none';
+    document.getElementById('sendPanelMinimize').style.display = '';
+  });
+
+  // ── Add posts (feed:parse → feed:generate) ──
+  // The "Add posts" button (clipboard parse → generate) is gone from the page:
+  // the extension's feed capture is the way posts arrive. The handler stays
+  // wired defensively in case the button is ever restored.
+  document.getElementById('addPostsBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('addPostsBtn');
+    const panel = document.getElementById('parsePanel');
+    const log = document.getElementById('parseLog');
+    const title = document.getElementById('parsePanelTitle');
+
+    if (btn.disabled) return;
+    if (!confirm('Run parse + generate now? This reads from the server clipboard, parses LinkedIn data, then runs the AI scoring pipeline. Logs stream below.')) return;
+
+    btn.disabled = true;
+    btn.style.opacity = 0.6;
+    panel.classList.remove('minimized');
+    panel.classList.add('visible');
+    title.textContent = 'Adding posts — parse';
+    log.innerHTML = '<p>Starting…</p>';
+
+    const appendLine = (line, tone) => {
+      const p = document.createElement('p');
+      p.textContent = line;
+      if (tone === 'banner') p.style.color = 'var(--gold)';
+      else if (tone === 'error') p.style.color = 'var(--brick)';
+      log.appendChild(p);
+      // Only auto-scroll if user hasn't scrolled away from the bottom.
+      if (log.scrollHeight - log.clientHeight - log.scrollTop < 40) {
+        log.scrollTop = log.scrollHeight;
+      }
+    };
+
+    try {
+      // The server resolves the operator from the session; posts get an
+      // `addedBy` of that user.
+      const response = await fetch('/feed/api/parse-and-generate', { method: 'POST' });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop();
+        for (const evt of events) {
+          if (!evt.startsWith('data: ')) continue;
+          let data;
+          try { data = JSON.parse(evt.slice(6)); } catch { continue; }
+          if (data.banner) { title.textContent = `Adding posts — ${data.stage}`; appendLine(data.message, 'banner'); }
+          else if (data.error) appendLine(`✗ ${data.error}`, 'error');
+          else if (data.done) {
+            appendLine(data.code === 0 ? '— pipeline complete —' : `— pipeline stopped (code ${data.code}${data.stoppedAt ? ` during ${data.stoppedAt}` : ''}) —`, data.code === 0 ? 'banner' : 'error');
+            title.textContent = data.code === 0 ? 'Add posts · done' : 'Add posts · failed';
+            // Refresh the feed list once new posts have landed.
+            if (data.code === 0) fetchData().then(() => { renderStats(); renderCards(); });
+          }
+          else if (data.message) appendLine(`[${data.stage}] ${data.message}`);
+        }
+      }
+    } catch (e) {
+      appendLine(`✗ ${e.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.style.opacity = '';
+    }
+  });
+
+  document.getElementById('parsePanel').addEventListener('click', (e) => {
+    if (document.getElementById('parsePanel').classList.contains('minimized')) {
+      document.getElementById('parsePanel').classList.remove('minimized');
+      document.getElementById('parsePanelMaximize').style.display = 'none';
+      document.getElementById('parsePanelMinimize').style.display = '';
+    }
+  });
+
+  document.getElementById('parsePanelMinimize').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('parsePanel').classList.add('minimized');
+    document.getElementById('parsePanelMinimize').style.display = 'none';
+    document.getElementById('parsePanelMaximize').style.display = '';
+  });
+
+  document.getElementById('parsePanelMaximize').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('parsePanel').classList.remove('minimized');
+    document.getElementById('parsePanelMaximize').style.display = 'none';
+    document.getElementById('parsePanelMinimize').style.display = '';
+  });
+
+  // ── Generate emails ──
+  function streamCommand(url, opts = {}) {
+    const panel = document.getElementById('parsePanel');
+    const log   = document.getElementById('parseLog');
+    const title = document.getElementById('parsePanelTitle');
+    title.textContent = opts.title || 'Running…';
+    panel.classList.remove('minimized');
+    panel.classList.add('visible');
+    log.innerHTML = '<p>Starting…</p>';
+
+    const appendLine = (line, tone) => {
+      const p = document.createElement('p');
+      p.textContent = line;
+      if (tone === 'banner') p.style.color = 'var(--gold)';
+      else if (tone === 'error') p.style.color = 'var(--brick)';
+      log.appendChild(p);
+      if (log.scrollHeight - log.clientHeight - log.scrollTop < 40) {
+        log.scrollTop = log.scrollHeight;
+      }
+    };
+
+    return fetch(url, { method: 'POST' }).then(async (response) => {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop();
+        for (const evt of events) {
+          if (!evt.startsWith('data: ')) continue;
+          let data;
+          try { data = JSON.parse(evt.slice(6)); } catch { continue; }
+          if (data.banner) appendLine(data.message, 'banner');
+          else if (data.error) appendLine(`✗ ${data.error}`, 'error');
+          else if (data.done) {
+            appendLine(data.code === 0 ? '— done —' : `— failed (code ${data.code}) —`, data.code === 0 ? 'banner' : 'error');
+            title.textContent = data.code === 0 ? (opts.doneTitle || 'Done') : 'Failed';
+            if (data.code === 0 && opts.onDone) opts.onDone();
+          }
+          else if (data.message) appendLine(`[${data.stage || 'job'}] ${data.message}`);
+        }
+      }
+    });
+  }
+
+  // One operator, so this is a direct action rather than a picker: check
+  // eligibility (feed resume + SMTP on the user doc), say what's missing and
+  // where to fix it, else confirm and stream the run.
+  async function runGenerateEmails() {
+    const btn = document.getElementById('genEmailsBtn');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch('/feed/api/email-eligibility');
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      if (!d.eligible) {
+        const lines = (d.reasons || []).map(x => `· ${x}`);
+        if (!d.hasFeedResume) lines.push('→ paste your feed resume JSON on /resume.html');
+        if (!d.hasSmtp) lines.push('→ add SMTP settings on /settings');
+        alert(`Can't generate emails yet:\n${lines.join('\n')}`);
+        return;
+      }
+      if (!confirm("Run feed:emails? This scores every hiring post you haven't been drafted for yet and writes new email drafts to mongo.")) return;
+      await streamCommand('/feed/api/generate-emails', {
+        title: 'Generating emails',
+        doneTitle: 'Emails generated',
+        onDone: () => fetchData().then(() => { renderStats(); renderCards(); }),
+      });
+    } catch (e) {
+      alert('Generate emails failed: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('genEmailsBtn').addEventListener('click', runGenerateEmails);
+
+  // ── Feed Capture (sniff feed API → parse → generate) ──
+  const FC_API = '/api/ext';
+  const FC_CAPTURE = `${FC_API}/feed-capture`;
+  let fcSources = [];
+  let fcPollTimer = null;
+
+  const fcFmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+  // Reflect armed state on the toolbar button + (if open) the menu status line.
+  function fcRenderStatus(st) {
+    const label = document.getElementById('feedCaptureLabel');
+    const statusEl = document.getElementById('fcStatus');
+    const toggle = document.getElementById('fcToggleBtn');
+    const captured = st.chunkCount ? ` · ${st.chunkCount} page${st.chunkCount === 1 ? '' : 's'}` : '';
+    const warn = st.dropped ? ` ⚠ dropped ${st.dropped}` : '';
+    if (label) label.textContent = st.armed ? 'Feed capture ●' : 'Feed capture';
+    if (toggle) toggle.textContent = st.armed ? 'Stop capturing' : 'Start capturing';
+    if (statusEl) {
+      statusEl.textContent = st.armed ? `Capturing… ${fcFmt(st.remainingMs)} left${captured}${warn}` : ((captured ? `Idle${captured}.` : 'Idle.') + warn);
+      statusEl.style.color = st.dropped ? 'var(--brick)' : (st.armed ? 'var(--moss)' : 'var(--text-dim)');
+    }
+  }
+
+  async function fcRefreshStatus() {
+    try {
+      const r = await fetch(`${FC_CAPTURE}/status`);
+      if (!r.ok) return null;
+      const st = await r.json();
+      fcRenderStatus(st);
+      if (!st.armed && fcPollTimer) { clearInterval(fcPollTimer); fcPollTimer = null; }
+      return st;
+    } catch { return null; }
+  }
+  function fcStartPolling() { if (!fcPollTimer) fcPollTimer = setInterval(fcRefreshStatus, 3000); }
+
+  async function fcLoadSources() {
+    try { const r = await fetch(`${FC_API}/feed-sources`); if (r.ok) fcSources = await r.json(); } catch {}
+  }
+  async function fcSaveSources() {
+    const r = await fetch(`${FC_API}/feed-sources`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sources: fcSources }) });
+    if (r.ok) fcSources = await r.json();
+  }
+
+  function fcRenderSources() {
+    const el = document.getElementById('fcSourceList');
+    if (!el) return;
+    if (!fcSources.length) { el.innerHTML = '<div style="color:var(--text-dim);font-size:0.78rem;padding:6px 0">No sources — add a feed / hashtag / content-search URL below.</div>'; return; }
+    el.innerHTML = fcSources.map(s => `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+        <input type="checkbox" data-fc-toggle="${escapeHtml(s.id)}" ${s.enabled !== false ? 'checked' : ''} title="Include in Open & capture">
+        <span style="flex:0 0 140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.8rem;color:var(--text)">${escapeHtml(s.label || '(no label)')}</span>
+        <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" title="${escapeHtml(s.url)}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.72rem;color:var(--text-dim);text-decoration:none">${escapeHtml(s.url)}</a>
+        <button class="filter-btn" data-fc-del="${escapeHtml(s.id)}" style="padding:3px 8px;font-size:0.72rem">Del</button>
+      </div>`).join('');
+  }
+
+  function fcMenuHtml() {
+    return `
+      <div id="fcStatus" style="font-size:0.78rem;color:var(--text-dim);margin-bottom:10px">Idle.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <button class="filter-btn" id="fcToggleBtn" style="padding:6px 12px;font-size:0.78rem">Start capturing</button>
+        <button class="filter-btn" id="fcCopyScrollBtn" style="padding:6px 12px;font-size:0.78rem">Copy scroll script</button>
+        <button class="filter-btn" id="fcOpenBtn" style="padding:6px 12px;font-size:0.78rem">Open sources</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <button class="filter-btn" id="fcLoadBtn" style="padding:6px 12px;font-size:0.78rem">Load captured</button>
+        <button class="filter-btn" id="fcAnalyzeBtn" style="padding:6px 12px;font-size:0.78rem">Analyze</button>
+        <button class="filter-btn" id="fcClearBtn" style="padding:6px 12px;font-size:0.78rem">Clear captured</button>
+      </div>
+      <div id="fcResult" style="font-size:0.74rem;color:var(--text-dim);margin-bottom:12px;min-height:1em"></div>
+      <div style="font:600 11px/1 var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">Capture sources</div>
+      <div id="fcSourceList" style="max-height:180px;overflow:auto;margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="fcNewLabel" placeholder="Label" style="flex:0 0 110px;padding:5px 8px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:5px;font-size:0.78rem">
+        <input type="text" id="fcNewUrl" placeholder="feed / hashtag / content-search URL" style="flex:1;padding:5px 8px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:5px;font-size:0.78rem">
+        <button class="filter-btn" id="fcAddBtn" style="padding:5px 10px;font-size:0.78rem">Add</button>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-dim);margin-top:10px"><b>Start capturing</b>, then scroll the LinkedIn feed / content-search tab yourself — or <b>Copy scroll script</b> and paste it in that tab's console (F12). The page (rendered posts) + API are captured as you scroll. <b>Open sources</b> opens your saved search tabs to scroll. <b>Load</b> banks posts (no AI) — they stay in the buffer until <b>Clear captured</b>. <b>Analyze</b> runs the AI over everything accumulated.</div>
+    `;
+  }
+
+  function fcStream(url, opts = {}) {
+    const panel = document.getElementById('parsePanel');
+    const log = document.getElementById('parseLog');
+    const title = document.getElementById('parsePanelTitle');
+    title.textContent = opts.title || 'Feed capture';
+    panel.classList.remove('minimized');
+    panel.classList.add('visible');
+    log.innerHTML = '<p>Starting…</p>';
+    const appendLine = (line, tone) => {
+      const p = document.createElement('p');
+      p.textContent = line;
+      if (tone === 'banner') p.style.color = 'var(--gold)';
+      else if (tone === 'error') p.style.color = 'var(--brick)';
+      log.appendChild(p);
+      if (log.scrollHeight - log.clientHeight - log.scrollTop < 40) log.scrollTop = log.scrollHeight;
+    };
+    return fetch(url, { method: 'POST' }).then(async (response) => {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop();
+        for (const evt of events) {
+          if (!evt.startsWith('data: ')) continue;
+          let data; try { data = JSON.parse(evt.slice(6)); } catch { continue; }
+          if (data.banner) { title.textContent = `Feed capture — ${data.stage}`; appendLine(data.message, 'banner'); }
+          else if (data.error) appendLine(`✗ ${data.error}`, 'error');
+          else if (data.done) {
+            appendLine(data.code === 0 ? '— analysis complete —' : `— failed (code ${data.code}${data.stoppedAt ? ` at ${data.stoppedAt}` : ''}) —`, data.code === 0 ? 'banner' : 'error');
+            title.textContent = data.code === 0 ? 'Feed capture · done' : 'Feed capture · failed';
+            if (data.code === 0 && opts.onDone) opts.onDone();
+          }
+          else if (data.message) appendLine(`[${data.stage || 'feed'}] ${data.message}`);
+        }
+      }
+    });
+  }
+
+  function fcWireMenu() {
+    document.getElementById('fcToggleBtn').addEventListener('click', async (e) => {
+      const armed = e.target.textContent.startsWith('Stop');
+      const r = await fetch(`${FC_CAPTURE}/${armed ? 'disarm' : 'arm'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      if (!r.ok) return;
+      fcRenderStatus(await r.json());
+      if (!armed) fcStartPolling();
+    });
+
+    // Copy the auto-scroll script to the clipboard (shared by the button + Open sources).
+    function fcCopyScript() {
+      const script = (document.getElementById('fcScrollScript')?.textContent || '').trim();
+      try { return navigator.clipboard.writeText(script); }
+      catch {
+        const ta = document.createElement('textarea'); ta.value = script; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        return Promise.resolve();
+      }
+    }
+
+    document.getElementById('fcCopyScrollBtn').addEventListener('click', async (e) => {
+      const btn = e.target; const orig = btn.textContent;
+      await fcCopyScript().catch(() => {});
+      btn.textContent = 'Copied ✓ — paste in the LinkedIn tab console';
+      setTimeout(() => { btn.textContent = orig; }, 2800);
+    });
+
+    document.getElementById('fcOpenBtn').addEventListener('click', (e) => {
+      const enabled = fcSources.filter(s => s.enabled !== false);
+      if (!enabled.length) { alert('Add and enable at least one capture source first.'); return; }
+      // Copy the scroll script up front (within the click gesture) so you can
+      // paste it straight into each opened tab's console.
+      fcCopyScript().catch(() => {});
+      // Arm passive (fire-and-forget so the gesture stays live for window.open);
+      // opens the source tabs — you scroll each (or paste the copied scroll script).
+      fetch(`${FC_CAPTURE}/arm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).then(() => fcRefreshStatus());
+      fcStartPolling();
+      const btn = e.target; const orig = btn.textContent; btn.disabled = true;
+      let i = 0;
+      (function openNext() {
+        if (i >= enabled.length) { btn.textContent = `Opened ${enabled.length} tab(s) · script copied — paste in each`; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3500); return; }
+        window.open(enabled[i].url, '_blank');
+        i++;
+        btn.textContent = `Opened ${i}/${enabled.length}…`;
+        setTimeout(openNext, 1500 + Math.random() * 1500);
+      })();
+    });
+
+    // Load = parse + store captured pages (no AI). Keeps the menu open and
+    // shows counts; Analyze is the separate AI step.
+    document.getElementById('fcLoadBtn').addEventListener('click', async (e) => {
+      const btn = e.target; const orig = btn.textContent;
+      const result = document.getElementById('fcResult');
+      btn.disabled = true; btn.textContent = 'Parsing…';
+      try {
+        const r = await fetch('/feed/api/capture-parse', { method: 'POST' });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+        const d = await r.json();
+        const c = d.counts || {};
+        if (d.parsed === 0 && (c.chunkCount || 0) === 0) {
+          result.textContent = 'Nothing captured yet — Start capturing, then scroll the LinkedIn tab.';
+          result.style.color = 'var(--text-dim)';
+        } else if (d.parsed === 0) {
+          result.textContent = `Captured ${c.chunkCount} page(s) but parsed 0 — unrecognized format.`;
+          result.style.color = 'var(--brick)';
+        } else {
+          result.textContent = `Parsed ${d.parsed} · Unprocessed ${d.unprocessed} · New captured ${d.newCaptured} · Duplicates ${d.duplicates}`;
+          result.style.color = 'var(--moss)';
+        }
+        fcRefreshStatus();
+      } catch (err) {
+        result.textContent = `Load failed: ${err.message}`;
+        result.style.color = 'var(--brick)';
+      } finally {
+        btn.disabled = false; btn.textContent = orig;
+      }
+    });
+
+    // Analyze = AI generate over all accumulated unprocessed posts → pool.
+    document.getElementById('fcAnalyzeBtn').addEventListener('click', () => {
+      if (!confirm('Run the AI over all accumulated (unanalyzed) posts now? This makes AI calls and writes hiring posts to the pool.')) return;
+      fcStream('/feed/api/feed-generate', {
+        title: 'Feed capture — analyze',
+        onDone: () => fetchData().then(() => { renderStats(); renderCards(); }),
+      });
+    });
+
+    document.getElementById('fcClearBtn').addEventListener('click', async (e) => {
+      const btn = e.target; const orig = btn.textContent;
+      const r = await fetch(FC_CAPTURE, { method: 'DELETE' });
+      if (r.ok) { btn.textContent = 'Cleared ✓'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+      fcRefreshStatus();
+    });
+
+    document.getElementById('fcAddBtn').addEventListener('click', async () => {
+      const labelEl = document.getElementById('fcNewLabel');
+      const urlEl = document.getElementById('fcNewUrl');
+      const url = urlEl.value.trim();
+      if (!url) { urlEl.focus(); return; }
+      try { new URL(url); } catch { urlEl.style.borderColor = 'var(--brick)'; setTimeout(() => { urlEl.style.borderColor = ''; }, 1500); return; }
+      fcSources.push({ label: labelEl.value.trim(), url, enabled: true });
+      labelEl.value = ''; urlEl.value = '';
+      await fcSaveSources();
+      fcRenderSources();
+    });
+    document.getElementById('fcNewUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('fcAddBtn').click(); });
+
+    const list = document.getElementById('fcSourceList');
+    list.addEventListener('click', async (e) => {
+      const del = e.target.closest('[data-fc-del]');
+      if (del) { fcSources = fcSources.filter(s => s.id !== del.dataset.fcDel); await fcSaveSources(); fcRenderSources(); }
+    });
+    list.addEventListener('change', async (e) => {
+      const tog = e.target.closest('[data-fc-toggle]');
+      if (tog) { const s = fcSources.find(x => x.id === tog.dataset.fcToggle); if (s) { s.enabled = tog.checked; await fcSaveSources(); } }
+    });
+  }
+
+  // Whether the capture panel is open survives reloads — it's a big panel that
+  // pushes the post list off screen, and it used to spring back open on every
+  // load regardless of the user having closed it.
+  const FC_OPEN_KEY = 'posts.feedCapturePanelOpen';
+  const fcPanelWasOpen = () => localStorage.getItem(FC_OPEN_KEY) !== '0'; // default open
+
+  // Toggle the inline panel (rendered into #feedCapturePanel in the page body).
+  // `remember` is false for the restore-on-load call so replaying the stored
+  // state can't itself rewrite that state.
+  async function openFeedCaptureMenu({ remember = true } = {}) {
+    const panel = document.getElementById('feedCapturePanel');
+    if (panel.style.display !== 'none') {
+      panel.style.display = 'none';
+      if (remember) localStorage.setItem(FC_OPEN_KEY, '0');
+      return;
+    }
+    panel.innerHTML = fcMenuHtml();
+    panel.style.display = 'block';
+    if (remember) localStorage.setItem(FC_OPEN_KEY, '1');
+    fcWireMenu();
+    await fcLoadSources();
+    fcRenderSources();
+    fcRefreshStatus();
+  }
+
+  document.getElementById('feedCaptureBtn').addEventListener('click', () => openFeedCaptureMenu());
+
+  // ── Curl Feed ────────────────────────────────────────────────────────────
+  // The run lives on the server (a 500-post pull outlives a tab), so this just
+  // starts it and polls. Same reasoning as the detached send run.
+  let cfTimer = null;
+  const cfPanel = () => document.getElementById('curlFeedPanel');
+  const cfLog = () => document.getElementById('cfLog');
+
+  // The search terms are the operator's own, not a default worth guessing —
+  // remember the last set so the panel reopens ready to run.
+  const CF_TERMS_KEY = 'posts.curlFeedTerms';
+  try {
+    const saved = localStorage.getItem(CF_TERMS_KEY);
+    if (saved) document.getElementById('cfTerms').value = saved;
+  } catch { /* storage blocked — the field just starts empty */ }
+
+  document.getElementById('curlFeedBtn').addEventListener('click', () => {
+    const p = cfPanel();
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    if (p.style.display === 'block') cfPoll();
+  });
+
+  function cfRender(d) {
+    const log = cfLog();
+    if (d.lines?.length) { log.style.display = 'block'; log.textContent = d.lines.join('\n'); log.scrollTop = log.scrollHeight; }
+    const prog = document.getElementById('cfProgress');
+    if (d.active && d.progress) {
+      const { term, got, target, requests } = d.progress;
+      prog.textContent = `“${term}” · ${got}/${target} posts · ${requests} requests`;
+    } else if (d.error) {
+      prog.style.color = 'var(--brick)';
+      prog.textContent = d.error;
+    } else if (d.summary) {
+      prog.style.color = 'var(--gold)';
+      const t = d.summary.terms.map(x => `${x.term}: ${x.got}`).join(' · ');
+      prog.textContent = `done — ${d.summary.added} posts staged, ${d.summary.dropped} dropped, ${d.summary.requests} requests${t ? ' · ' + t : ''}`
+        + (d.summary.aborted ? ` · ${d.summary.aborted}` : '');
+    }
+    document.getElementById('cfStart').style.display = d.active ? 'none' : '';
+    document.getElementById('cfStop').style.display = d.active ? '' : 'none';
+  }
+
+  async function cfPoll() {
+    try {
+      const d = await (await fetch('/feed/api/curl-feed/status')).json();
+      cfRender(d);
+      clearTimeout(cfTimer);
+      if (d.active) cfTimer = setTimeout(cfPoll, 1500);
+      else if (d.done) { loadStats().then(renderStats); fcRefreshStatus(); }
+    } catch { /* transient */ }
+  }
+
+  document.getElementById('cfStart').addEventListener('click', async () => {
+    const curl = document.getElementById('cfCurl').value.trim();
+    const terms = document.getElementById('cfTerms').value.split(',').map(t => t.trim()).filter(Boolean);
+    const perTerm = Number(document.getElementById('cfPerTerm').value) || 250;
+    if (!curl) return alert('Paste the curl first.');
+    if (!terms.length) return alert('Add at least one search term.');
+    try { localStorage.setItem(CF_TERMS_KEY, terms.join(', ')); } catch {}
+    document.getElementById('cfProgress').style.color = 'var(--gold)';
+    document.getElementById('cfProgress').textContent = 'starting…';
+    const r = await fetch('/feed/api/curl-feed/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ curl, terms, perTerm }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      document.getElementById('cfProgress').style.color = 'var(--brick)';
+      document.getElementById('cfProgress').textContent = d.error;
+      return;
+    }
+    cfPoll();
+  });
+
+  document.getElementById('cfStop').addEventListener('click', async () => {
+    await fetch('/feed/api/curl-feed/stop', { method: 'POST' });
+    cfPoll();
+  });
+
+  document.getElementById('cfClear').addEventListener('click', async () => {
+    if (!confirm('Discard everything Curl Feed has staged but not yet analyzed?')) return;
+    const d = await (await fetch('/feed/api/curl-feed/clear', { method: 'POST' })).json();
+    document.getElementById('cfProgress').textContent = `cleared ${d.removed} staged posts (${d.remaining} left in the pool)`;
+    cfLog().style.display = 'none';
+    fcRefreshStatus();
+  });
+
+  // ── Load More ──
+  document.getElementById('loadMoreBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('loadMoreBtn');
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    currentLimit += PAGE_SIZE;
+    await loadFeed();
+  });
+
+  // ── Init ──
+  async function init() {
+    try {
+      // Route-aware chrome: Generate emails is a feed-only action.
+      document.getElementById('genEmailsBtn').style.display = POSTS_PAGE ? 'none' : '';
+      // Title chip in the browser tab + page wordmark.
+      document.title = POSTS_PAGE ? 'Posts · Resume Forge' : 'Feed · Resume Forge';
+
+      await fetchData();
+      renderFilters();
+      renderStats();
+      renderCards();
+      renderLoadMore();
+      // Restore the capture panel to however it was left, and resume the
+      // countdown if a capture is armed. The status poll runs either way —
+      // an armed capture must keep ticking even with the panel collapsed.
+      if (fcPanelWasOpen()) openFeedCaptureMenu({ remember: false });
+      fcRefreshStatus().then((st) => { if (st?.armed) fcStartPolling(); });
+    } catch (err) {
+      document.getElementById('subtitle').textContent = 'Failed to load data';
+      document.getElementById('cards').innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">&#9888;</div>
+          <p>Could not connect to dashboard server</p>
+          <p style="margin-top:8px;font-size:0.85rem">Make sure the server is running: <code style="color:var(--cyan)">npm run web</code></p>
+        </div>`;
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

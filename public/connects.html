@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connects · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+<style>
+  .cx-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: 8px; margin-bottom: 14px; overflow: hidden;
+  }
+  .cx-stats__cell {
+    padding: 10px 14px 8px; display: flex; align-items: baseline; gap: 10px;
+    box-shadow: inset -1px 0 0 0 var(--line-soft);
+    cursor: pointer; transition: background 90ms ease;
+  }
+  .cx-stats__cell:hover { background: var(--surface-2); }
+  .cx-stats__cell[data-active="true"] { background: var(--surface-2); box-shadow: inset -1px 0 0 0 var(--line-soft), inset 0 -2px 0 0 var(--gold); }
+  .cx-stats__n { font: 700 20px/1 var(--sans); }
+  .cx-stats__l { font: 600 10.5px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+
+  .cx-row {
+    border: 1px solid var(--line-soft); border-radius: 8px;
+    background: var(--surface); margin-bottom: 8px; padding: 12px 14px;
+  }
+  .cx-row__top { display: flex; align-items: flex-start; gap: 12px; }
+  .cx-row__main { flex: 1; min-width: 0; }
+  .cx-name { font: 650 15px/1.3 var(--sans); color: var(--ink); }
+  .cx-headline { font: 400 12.5px/1.45 var(--sans); color: var(--ink-3); margin-top: 2px; }
+  .cx-role { font: 600 13px/1.4 var(--sans); color: var(--gold); margin-top: 4px; }
+  .cx-summary { font: 400 12.5px/1.5 var(--sans); color: var(--ink-2); margin-top: 6px; }
+  .cx-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .cx-btn {
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2);
+    border-radius: 6px; padding: 5px 11px; font: 600 12px/1 var(--sans);
+    cursor: pointer; white-space: nowrap;
+  }
+  .cx-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .cx-btn--primary { border-color: var(--gold); color: var(--gold); }
+  .cx-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .cx-pill {
+    font: 600 10.5px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+    border-radius: 999px; padding: 4px 9px; border: 1px solid var(--line);
+    color: var(--ink-3); white-space: nowrap;
+  }
+  .cx-msg {
+    width: 100%; margin-top: 10px; min-height: 96px; resize: vertical;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+    border-radius: 6px; padding: 9px 11px; font: 400 13px/1.55 var(--sans); outline: none;
+  }
+  .cx-msg:focus { border-color: var(--gold); }
+  .cx-empty { color: var(--ink-3); font: 400 14px/1.6 var(--sans); padding: 40px 0; text-align: center; }
+  .cx-note {
+    font: 400 12.5px/1.6 var(--sans); color: var(--ink-3);
+    border-left: 2px solid var(--line); padding-left: 10px; margin-bottom: 14px;
+  }
+</style>
+</head>
+<body>
+  <h1 class="page-title">Connects</h1>
+
+  <div class="cx-note">
+    Posts with no email address. The invitation goes out without a note; when it's
+    accepted — picked up automatically the next time your connections page is
+    scraped — the row moves to <strong>Connected</strong> and a follow-up message
+    referencing their post is drafted for you.
+  </div>
+
+  <div class="cx-stats" id="stats"></div>
+
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <button class="cx-btn" id="refreshBtn">Refresh</button>
+    <button class="cx-btn cx-btn--primary" id="draftAllBtn">Draft messages for all connected</button>
+    <span id="hint" style="font:400 12px/1 var(--sans);color:var(--ink-3)"></span>
+  </div>
+
+  <div id="list"></div>
+
+<script>
+(() => {
+  const STATUSES = ['invited', 'connected', 'messaged', 'skipped'];
+  let statusFilter = 'connected';   // the actionable bucket by default
+  let rows = [];
+  let counts = {};
+
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const hint = (msg) => { document.getElementById('hint').textContent = msg || ''; };
+
+  async function load() {
+    const r = await fetch(`/feed/api/connects?status=${encodeURIComponent(statusFilter)}&limit=300`);
+    if (!r.ok) { hint('failed to load'); return; }
+    const data = await r.json();
+    rows = data.items || [];
+    counts = data.counts || {};
+    render();
+  }
+
+  function renderStats() {
+    document.getElementById('stats').innerHTML = STATUSES.map(s => `
+      <div class="cx-stats__cell" data-status="${s}" data-active="${statusFilter === s}">
+        <span class="cx-stats__n">${counts[s] || 0}</span>
+        <span class="cx-stats__l">${s}</span>
+      </div>`).join('');
+    document.querySelectorAll('.cx-stats__cell').forEach(el => {
+      el.addEventListener('click', () => { statusFilter = el.dataset.status; load(); });
+    });
+  }
+
+  function rowHtml(r) {
+    const connected = r.status === 'connected';
+    const messaged = r.status === 'messaged';
+    return `
+    <div class="cx-row" data-postid="${esc(r.postId)}">
+      <div class="cx-row__top">
+        <div class="cx-row__main">
+          <div class="cx-name">${esc(r.posterName || 'Unknown')}</div>
+          ${r.headline ? `<div class="cx-headline">${esc(r.headline)}</div>` : ''}
+          ${r.job?.title ? `<div class="cx-role">${esc(r.job.title)}${r.job.company ? ' @ ' + esc(r.job.company) : ''}</div>` : ''}
+          ${r.postSummary ? `<div class="cx-summary">${esc(String(r.postSummary).slice(0, 220))}</div>` : ''}
+        </div>
+        <div class="cx-actions">
+          ${r.degree ? `<span class="cx-pill">${esc(r.degree)}</span>` : ''}
+          <span class="cx-pill">${esc(r.status)}</span>
+          <a class="cx-btn" href="${esc(r.profileUrl)}" target="_blank" rel="noopener">Profile</a>
+          ${connected || messaged
+            ? `<button class="cx-btn" data-act="draft">${r.message ? 'Redraft' : 'Draft'}</button>
+               <button class="cx-btn cx-btn--primary" data-act="send" ${r.message ? '' : 'disabled'}>Copy &amp; open chat</button>`
+            : ''}
+          ${!messaged ? `<button class="cx-btn" data-act="skip">Skip</button>` : ''}
+        </div>
+      </div>
+      ${(connected || messaged)
+        ? `<textarea class="cx-msg" data-act="msg" placeholder="No message drafted yet — hit Draft.">${esc(r.message || '')}</textarea>`
+        : ''}
+    </div>`;
+  }
+
+  function render() {
+    renderStats();
+    const el = document.getElementById('list');
+    el.innerHTML = rows.length
+      ? rows.map(rowHtml).join('')
+      : `<div class="cx-empty">Nothing ${esc(statusFilter)}.${statusFilter === 'connected'
+          ? ' Invitations move here once they are accepted and your connections page has been scraped.' : ''}</div>`;
+    document.getElementById('draftAllBtn').style.display = statusFilter === 'connected' ? '' : 'none';
+  }
+
+  // Delegated so the handlers survive every re-render.
+  document.getElementById('list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const row = btn.closest('.cx-row');
+    const postId = row.dataset.postid;
+    const rec = rows.find(r => r.postId === postId);
+    const act = btn.dataset.act;
+
+    if (act === 'skip') {
+      btn.disabled = true;
+      await fetch('/feed/api/connects/status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, status: 'skipped' }),
+      });
+      return load();
+    }
+
+    if (act === 'draft') {
+      btn.disabled = true; btn.textContent = 'Drafting…';
+      const r = await fetch('/feed/api/connects/draft', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds: [postId] }),
+      });
+      if (!r.ok) { hint('draft failed'); btn.disabled = false; btn.textContent = 'Draft'; return; }
+      return load();
+    }
+
+    if (act === 'send') {
+      // Whatever is in the box wins — the operator may have edited it.
+      const text = row.querySelector('[data-act="msg"]')?.value || rec?.message || '';
+      try { await navigator.clipboard.writeText(text); }
+      catch { hint('clipboard blocked — copy the text manually'); }
+      // Persist any edit, then mark it sent. Opening the chat is the last step
+      // so the copied text is on the clipboard before the tab switches.
+      await fetch('/feed/api/connects/status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, status: 'messaged', message: text }),
+      });
+      window.open(rec?.messageUrl || rec?.profileUrl, '_blank', 'noopener');
+      hint('Message copied to clipboard — paste it into the chat.');
+      return load();
+    }
+  });
+
+  document.getElementById('refreshBtn').addEventListener('click', load);
+
+  document.getElementById('draftAllBtn').addEventListener('click', async (e) => {
+    const ids = rows.filter(r => !r.message).map(r => r.postId);
+    if (!ids.length) return hint('every connected row already has a draft');
+    e.target.disabled = true; e.target.textContent = 'Drafting…';
+    const r = await fetch('/feed/api/connects/draft', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postIds: ids }),
+    });
+    hint(r.ok ? `drafted ${(await r.json()).drafted}` : 'draft failed');
+    e.target.disabled = false; e.target.textContent = 'Draft messages for all connected';
+    load();
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

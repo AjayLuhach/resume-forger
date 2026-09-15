@@ -1,0 +1,2606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apply · Forge</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+<style>
+  /* Tabular apply view — one row per scanned job, your status + actions on the right. */
+  .apply-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .apply-toolbar__sub {
+    font: 500 13px/1.3 var(--sans);
+    color: var(--ink-3);
+  }
+  .apply-toolbar__btn {
+    background: var(--gold); color: var(--bg);
+    border: 1px solid var(--gold);
+    border-radius: 6px;
+    padding: 7px 14px;
+    font: 600 13px/1 var(--sans);
+    cursor: pointer;
+    transition: background 100ms ease;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .apply-toolbar__btn:hover { background: var(--gold-2); }
+  .apply-toolbar__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .apply-status {
+    font: 600 12px/1.2 var(--mono);
+    letter-spacing: 0.04em;
+    color: var(--ink-3);
+    margin-left: 8px;
+  }
+  .apply-status[data-tone="ok"]  { color: var(--moss); }
+  .apply-status[data-tone="err"] { color: var(--brick); }
+
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .search-box {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font: 500 14.5px/1.4 var(--sans);
+    outline: none;
+  }
+  .search-box:focus { border-color: var(--gold); }
+
+  .results-meta {
+    font: 600 12px/1.3 var(--mono);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+
+  /* The table itself */
+  .apply-table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    overflow: hidden;
+    overflow-x: auto;
+  }
+  .apply-table {
+    width: 100%;
+    border-collapse: collapse;
+    font: 500 14.5px/1.4 var(--sans);
+    min-width: 0;
+  }
+  .apply-table thead th {
+    text-align: left;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+    background: var(--bg-paper);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0;
+    white-space: nowrap;   /* keep sort-arrow on the same line as label */
+  }
+  .apply-table tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+    font-size: 13px;
+  }
+  .apply-table tbody tr:last-child td { border-bottom: none; }
+  .apply-table tbody tr:hover { background: rgba(255,255,255,0.015); }
+  .apply-table thead th { padding: 9px 10px; }
+  /* Sortable column headers — clickable indicator carets that mirror the
+     current sort selection in the dropdown. */
+  .apply-table thead th[data-sortable] { cursor: pointer; user-select: none; }
+  .apply-table thead th[data-sortable]:hover { color: var(--gold); }
+  .apply-table thead th[data-active] { color: var(--gold); }
+  .col-num    { width: 28px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .col-score  { width: 60px; font-variant-numeric: tabular-nums; }
+  .col-emp    { width: 110px; font-variant-numeric: tabular-nums; }
+  /* Clamp to 1 line so AI-returned sentences like "1+ years of work
+     experience with X, 3+ years of Y …" don't blow the row height
+     into a 200px monster. Full text moves to a title= tooltip. */
+  .col-exp    { width: 80px;  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+  .col-date   { width: 92px;  font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .col-type   { width: 95px;  font: 500 12px/1.35 var(--sans); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 95px; }
+  .col-applics{ width: 80px;  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+  .col-actions { width: 1%; white-space: nowrap; }
+  /* EASY APPLY tag — sits next to the applicants number when the
+     LinkedIn listing offers in-page apply. */
+  .ea-tag {
+    display: block;
+    margin-top: 2px;
+    font: 600 9px/1 var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--gold);
+    background: var(--gold-soft);
+    border: 1px solid var(--gold-line);
+    border-radius: 3px;
+    padding: 2px 4px;
+    text-align: center;
+  }
+  /* External-apply chips — one per detected channel (email / form / ATS /
+     WhatsApp). Sits inline with the job title (after the platform pill /
+     refs pill) so a quick scan of the title row surfaces "this JD wants
+     you to apply outside LinkedIn" without crowding the action area.
+     Tooltip carries the actual addresses/URLs. */
+  .ext-strip { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: 2px; }
+  .ext-chip {
+    display: inline-grid; place-items: center;
+    width: 18px; height: 18px;
+    font: 600 11px/1 var(--mono);
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid currentColor;
+    background: transparent;
+    padding: 0;
+    transition: transform 80ms;
+  }
+  .ext-chip:hover { transform: scale(1.12); }
+  .ext-chip[data-kind="email"] { color: var(--gold);  background: var(--gold-soft); }
+  .ext-chip[data-kind="phone"] { color: var(--moss);  background: var(--moss-soft); }
+  .ext-chip[data-kind="link"]  { color: var(--ember); background: var(--ember-soft, rgba(255,140,0,0.08)); }
+  /* Click-feedback states (toggled by copyExtValue). Border swap is enough
+     to signal success/failure without re-laying out the strip. */
+  .ext-chip[data-toast="ok"]  { background: var(--moss-soft);  color: var(--moss);  border-color: var(--moss); }
+  .ext-chip[data-toast="err"] { background: var(--brick-soft); color: var(--brick); border-color: var(--brick); }
+  /* Contacts block in the analysis panel — one row per detected target.
+     Glyph (kind icon) · value (clickable link) · copy chip. The kind
+     coloring on the glyph echoes the inline-strip chips so the user can
+     parse the row at a glance. */
+  .contacts-list { display: flex; flex-direction: column; gap: 4px; }
+  .contact-row {
+    display: grid;
+    grid-template-columns: 22px 1fr 26px;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 5px;
+  }
+  .contact-row__glyph {
+    display: inline-grid; place-items: center;
+    width: 22px; height: 22px;
+    font: 600 12px/1 var(--mono);
+    border-radius: 4px;
+    border: 1px solid currentColor;
+  }
+  .contact-row__glyph[data-kind="email"] { color: var(--gold);  background: var(--gold-soft); }
+  .contact-row__glyph[data-kind="phone"] { color: var(--moss);  background: var(--moss-soft); }
+  .contact-row__glyph[data-kind="link"]  { color: var(--ember); background: var(--ember-soft, rgba(255,140,0,0.08)); }
+  .contact-row__val {
+    color: var(--ink);
+    font: 500 13px/1.35 var(--sans);
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .contact-row__val:hover { color: var(--gold); text-decoration: underline; }
+  .contact-row__copy {
+    display: inline-grid; place-items: center;
+    width: 26px; height: 26px;
+    font: 600 13px/1 var(--mono);
+    color: var(--ink-2);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .contact-row__copy:hover { color: var(--gold); border-color: var(--gold); }
+  .contact-row__copy[data-toast="ok"]  { color: var(--moss);  border-color: var(--moss);  background: var(--moss-soft); }
+  .contact-row__copy[data-toast="err"] { color: var(--brick); border-color: var(--brick); background: var(--brick-soft); }
+  /* Score with verdict-tone coloring on the number itself. */
+  .score-num { font: 700 13.5px/1 var(--mono); }
+  .score-num[data-verdict="good"]  { color: var(--moss);  }
+  .score-num[data-verdict="maybe"] { color: var(--ember); }
+  .score-num[data-verdict="skip"]  { color: var(--brick); }
+  /* Inline action group — small icon-style buttons that mirror the old
+     dashboard's Open/Note/Reject/Apply density. */
+  .action-row {
+    display: inline-flex; gap: 4px; align-items: center;
+  }
+  /* Action icons (Note, Debug). Default is high-contrast so they're easy
+     to spot at a glance — the dark-on-dark muted style was unreadable. */
+  .ico-btn {
+    display: inline-grid; place-items: center;
+    width: 26px; height: 26px;
+    border: 1px solid var(--ink-3);
+    background: var(--surface-2);
+    color: var(--ink);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 80ms, border-color 80ms, background 80ms;
+  }
+  .ico-btn:hover { color: var(--gold); border-color: var(--gold); background: var(--gold-soft); }
+  /* Per-action tints — explicit colors so each icon's intent is obvious. */
+  .ico-btn[data-action="copy-note"] { color: var(--gold);  border-color: var(--gold-line); }
+  .ico-btn[data-action="debug"]     { color: var(--ember); border-color: var(--ember); }
+  .ico-btn[data-toast="ok"]         { color: var(--moss);  border-color: var(--moss); background: var(--moss-soft); }
+  .ico-btn[data-toast="err"]        { color: var(--brick); border-color: var(--brick); background: var(--brick-soft); }
+  .apply-table th.user-col, .apply-table td.user-col {
+    border-left: 1px solid var(--line-soft);
+    background: rgba(255,255,255,0.012);
+  }
+  /* Status + actions pair. The status cell inherits the left border; the
+     actions cell only gets the bg tint. When the page-level status filter
+     is active the status pill is redundant (every row in view has that
+     status) — collapse the cell. */
+  .apply-table th.user-status, .apply-table td.user-status { width: 110px; }
+  .apply-table.no-status-col th.user-status,
+  .apply-table.no-status-col td.user-status { display: none; }
+  .apply-table th.user-actions, .apply-table td.user-actions {
+    width: 150px;
+    background: rgba(255,255,255,0.012);
+    /* No left border — visually pairs with the status cell. */
+    border-left: none;
+  }
+  /* Job column = title + platform pill only. Company moves to its own
+     column so it lines up across rows. min/max keep things readable. */
+  .apply-table .col-job   { min-width: 200px; max-width: 280px; cursor: pointer; }
+  .apply-table .col-job:hover { background: rgba(255,255,255,0.025); }
+  .apply-table .col-job a { cursor: pointer; }
+  .apply-table .col-company {
+    min-width: 140px; max-width: 180px;
+    font: 500 13px/1.35 var(--sans);
+    color: var(--ink);
+  }
+  .apply-table .col-company__loc {
+    display: block;
+    font: 500 11.5px/1.3 var(--sans);
+    color: var(--ink-3);
+    margin-top: 2px;
+  }
+  /* Block-company icon — sits inline next to the company name; brick tint
+     so it visually warns. Hover reveals; idle is faint to avoid noise. */
+  .block-co-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    margin-left: 4px; padding: 0;
+    font: 700 12px/1 var(--mono);
+    color: var(--brick);
+    border: 1px solid var(--brick);
+    background: transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0.35;
+    vertical-align: -3px;
+    transition: opacity 120ms ease, background 120ms ease;
+  }
+  .apply-table tr:hover .block-co-btn { opacity: 0.8; }
+  .block-co-btn:hover { opacity: 1; background: var(--brick-soft); }
+  .apply-table .col-meta  { white-space: nowrap; color: var(--ink-2); }
+
+  .job-cell__title {
+    font: 600 15px/1.35 var(--sans);
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+  .job-cell__title a { color: inherit; text-decoration: none; }
+  .job-cell__title a:hover { color: var(--gold); }
+  .job-cell__company {
+    font: 500 13px/1.4 var(--sans);
+    color: var(--ink-2);
+  }
+  .job-cell__loc {
+    font: 500 12.5px/1.4 var(--sans);
+    color: var(--ink-2);
+    margin-top: 2px;
+  }
+
+  .platform-pill {
+    display: inline-block;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-3);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 8px;
+  }
+  .platform-pill[data-platform="LinkedIn"] { color: var(--slate); border-color: var(--slate); }
+  .platform-pill[data-platform="Naukri"]   { color: var(--ember); border-color: var(--ember); }
+  /* Peer-import pill — the row was pulled from another operator's database
+     by the peer sync and its analysis was computed against THEIR profile.
+     Plum so it reads as "not one of ours" next to the platform pill; the
+     label is the peer's own name, so it keeps its case. */
+  .platform-pill[data-imported] {
+    color: var(--plum); border-color: var(--plum); background: var(--plum-soft);
+    text-transform: none; letter-spacing: 0.04em;
+  }
+  /* Inline variant — sits next to the job title rather than in its own
+     column. Smaller padding, lighter typography so it doesn't dominate. */
+  .platform-pill--inline {
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    vertical-align: 2px;
+  }
+  /* Refs pill — sits inline next to the platform pill. Moss-tinted to
+     read as "good news: you know someone there". Pulses subtly when a
+     NEW connect arrived since the last popover open. */
+  /* Tailored-resume pill — sits beside the refs pill in the job cell.
+     Colour tracks the ATS band so a scan down the column reads as a
+     heat map rather than a column of numbers. */
+  .ats-pill {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 7px;
+    font: 600 10px/1 var(--mono);
+    letter-spacing: 0.06em;
+    border-radius: 4px;
+    cursor: pointer;
+    vertical-align: 2px;
+    user-select: none;
+    border: 1px solid currentColor;
+  }
+  .ats-pill[data-band="high"] { color: var(--moss);  background: var(--moss-soft); }
+  .ats-pill[data-band="mid"]  { color: var(--gold);  background: var(--gold-soft, rgba(190,150,60,0.14)); }
+  .ats-pill[data-band="low"]  { color: var(--ember); background: rgba(200,90,50,0.12); }
+  .ats-pill:hover { filter: brightness(1.25); }
+  .ats-pill[data-state="running"] { color: var(--ink-3); background: transparent; cursor: default; }
+  .ats-pill[data-state="failed"]  { color: var(--ember); background: transparent; }
+  /* Score kept, file gone. Muted and outlined rather than coloured by band —
+     it must not read as a resume you can open. */
+  .ats-pill[data-state="nofile"] {
+    color: var(--ink-3); background: transparent;
+    border: 1px dashed var(--line); opacity: 0.75;
+  }
+
+  /* Resume viewer — same overlay treatment as the extraction-debug modal. */
+  .resume-modal__panel {
+    background: var(--surface, #14120f);
+    border: 1px solid var(--line, #2a251d);
+    border-radius: 10px;
+    max-width: 860px;
+    width: 100%;
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 22px 26px;
+  }
+  .resume-modal__h {
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 18px 0 7px;
+  }
+  .resume-modal__h:first-of-type { margin-top: 6px; }
+  .resume-modal__body { font: 400 13.5px/1.6 var(--sans); color: var(--ink-2); }
+  .resume-modal__body ul { margin: 0; padding-left: 18px; }
+  .resume-modal__body li { margin-bottom: 5px; }
+  .resume-modal__score {
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline;
+    font: 600 12px/1 var(--mono); color: var(--ink-3);
+  }
+  .resume-modal__score b { font-size: 22px; color: var(--gold); }
+
+  .refs-pill {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 7px;
+    font: 600 10px/1 var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--moss);
+    background: var(--moss-soft);
+    border: 1px solid var(--moss);
+    border-radius: 4px;
+    cursor: pointer;
+    vertical-align: 2px;
+    user-select: none;
+  }
+  .refs-pill:hover { background: var(--moss); color: var(--bg); }
+  .refs-pill[data-new="true"]::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--ember);
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: 1px;
+    box-shadow: 0 0 6px var(--ember);
+  }
+  /* Popover that lists matched connections. Anchored to the body
+     (not the cell) so it can break out of the table's overflow:hidden. */
+  .refs-pop {
+    position: fixed;
+    z-index: 1100;
+    background: var(--surface);
+    border: 1px solid var(--ink-3);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    padding: 10px 12px;
+    width: 360px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .refs-pop__h {
+    font: 600 11px/1.2 var(--mono);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 8px;
+  }
+  .refs-pop__row {
+    display: grid;
+    grid-template-columns: 36px 1fr max-content;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .refs-pop__row:last-child { border-bottom: none; }
+  .refs-pop__photo {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--surface-2) center/cover no-repeat;
+    border: 1px solid var(--line);
+    color: var(--ink-3);
+    display: grid; place-items: center;
+    font: 600 12px/1 var(--sans);
+  }
+  .refs-pop__name { font: 600 13px/1.3 var(--sans); color: var(--ink); }
+  .refs-pop__name a { color: inherit; text-decoration: none; }
+  .refs-pop__name a:hover { color: var(--gold); }
+  .refs-pop__headline { font: 500 11.5px/1.4 var(--sans); color: var(--ink-2); margin-top: 1px; word-break: break-word; }
+  .refs-pop__msg {
+    display: inline-block;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.06em;
+    padding: 5px 9px;
+    color: var(--gold);
+    background: var(--gold-soft);
+    border: 1px solid var(--gold-line);
+    border-radius: 4px;
+    text-decoration: none;
+  }
+  .refs-pop__msg:hover { background: var(--gold); color: var(--bg); }
+  /* Toast feedback while the Msg click is generating/copying the connect
+     note. 'pending' covers the brief LLM round-trip; 'ok'/'err' flash for
+     ~1.5s after copy. Width-stable so the label swap doesn't jitter. */
+  .refs-pop__msg[data-toast="pending"] { color: var(--ink-2); background: var(--surface-2); border-color: var(--line); }
+  .refs-pop__msg[data-toast="ok"]      { color: var(--moss);  background: var(--moss-soft);  border-color: var(--moss); }
+  .refs-pop__msg[data-toast="err"]     { color: var(--brick); background: var(--brick-soft); border-color: var(--brick); }
+  .refs-pop__new {
+    display: inline-block;
+    margin-left: 4px;
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--ember);
+    background: var(--ember-soft);
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--ember);
+  }
+
+  /* Status cell */
+  .stat-row {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .stat-pill {
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 5px 9px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+  }
+  .stat-pill[data-status="pending"]      { color: var(--ink-3);  background: var(--surface-2); border-color: var(--line); }
+  .stat-pill[data-status="applied"]      { color: var(--gold);   background: var(--gold-soft); border-color: var(--gold-line); }
+  .stat-pill[data-status="interviewing"] { color: var(--ember);  background: var(--ember-soft); }
+  .stat-pill[data-status="success"]      { color: var(--moss);   background: var(--moss-soft); }
+  .stat-pill[data-status="rejected"]     { color: var(--brick);  background: var(--brick-soft); }
+
+  .stat-btn {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: 600 11.5px/1 var(--sans);
+    cursor: pointer;
+    transition: border-color 80ms, color 80ms;
+  }
+  .stat-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .stat-btn[data-action="apply"]      { color: var(--gold);  border-color: var(--gold-line); }
+  .stat-btn[data-action="apply"]:hover     { background: var(--gold-soft); }
+  .stat-btn[data-action="interview"] { color: var(--ember); border-color: var(--ember); }
+  .stat-btn[data-action="interview"]:hover { background: var(--ember-soft); }
+  .stat-btn[data-action="success"]   { color: var(--moss);  border-color: var(--moss); }
+  .stat-btn[data-action="success"]:hover   { background: var(--moss-soft); }
+  .stat-btn[data-action="reject"]    { color: var(--brick); border-color: var(--brick); }
+  .stat-btn[data-action="reject"]:hover    { background: var(--brick-soft); }
+  .stat-btn[data-action="reset"]     { color: var(--ink-3); }
+  /* Note button — gold tone so it reads as "secondary action available
+     on every row" alongside the primary Apply / Reject pair. Matches the
+     stat-btn shape so the row's button bar stays uniform. */
+  .stat-btn.note-btn { color: var(--gold); border-color: var(--gold-line); }
+  .stat-btn.note-btn:hover { background: var(--gold-soft); }
+  .stat-btn.note-btn[data-toast="ok"]  { background: var(--moss-soft); color: var(--moss); border-color: var(--moss); }
+  .stat-btn.note-btn[data-toast="err"] { background: var(--brick-soft); color: var(--brick); border-color: var(--brick); }
+  .stat-btn.note-btn[disabled] { opacity: 0.6; cursor: progress; }
+
+  .stat-date {
+    display: block;
+    font: 600 10.5px/1.2 var(--mono);
+    color: var(--ink-4);
+    letter-spacing: 0.06em;
+    margin-top: 6px;
+  }
+
+  .empty-row td {
+    text-align: center;
+    color: var(--ink-3);
+    padding: 32px 0;
+    font: 500 14.5px/1.4 var(--sans);
+  }
+
+  /* Expand/collapse toggle for the analysis details row. */
+  .expand-btn {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-3);
+    border-radius: 4px;
+    width: 22px; height: 22px;
+    cursor: pointer;
+    display: inline-grid; place-items: center;
+    margin-right: 6px;
+    vertical-align: middle;
+    transition: transform 100ms ease, border-color 80ms;
+  }
+  .expand-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .expand-btn[aria-expanded="true"] { transform: rotate(90deg); color: var(--gold); border-color: var(--gold-line); }
+
+  /* Details panel — a single full-width row that follows the job row. */
+  .details-row td {
+    padding: 0;
+    background: var(--bg-paper);
+    border-top: 1px solid var(--line-soft);
+  }
+  .details-panel {
+    padding: 14px 18px 18px;
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) {
+    .details-panel { grid-template-columns: 1fr; }
+  }
+  .details-block {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .details-block__h {
+    font: 600 11px/1.2 var(--mono);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-2);    /* was --ink-3; section labels were too low-contrast */
+    margin-bottom: 8px;
+  }
+  .details-block__body {
+    font: 500 14px/1.6 var(--sans);
+    color: var(--ink);
+    white-space: pre-wrap;
+  }
+  .details-block__body p { margin: 0 0 8px; }
+  .details-block__body p:last-child { margin: 0; }
+  .skill-tag {
+    display: inline-block;
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.08em;
+    padding: 4px 7px;
+    margin: 0 4px 4px 0;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    background: var(--surface-2);
+  }
+  .skill-tag[data-kind="match"]   { color: var(--moss);  border-color: var(--moss); background: var(--moss-soft); }
+  .skill-tag[data-kind="missing"] { color: var(--brick); border-color: var(--brick); background: var(--brick-soft); }
+  .red-flag-item {
+    color: var(--brick);
+    font: 500 13px/1.5 var(--sans);
+    margin-bottom: 3px;
+  }
+  .red-flag-item::before { content: '• '; margin-right: 2px; }
+  .meta-kv {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 12px;
+    font: 500 13px/1.5 var(--sans);
+  }
+  .meta-kv dt { color: var(--ink-2); font-weight: 600; }   /* was ink-3 */
+  .meta-kv dd { color: var(--ink); margin: 0; word-break: break-word; } /* was ink-2 */
+  .connect-note {
+    font: 500 13px/1.55 var(--sans);
+    color: var(--ink);
+    background: var(--gold-soft);
+    border: 1px solid var(--gold-line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+  }
+  .copy-note-btn {
+    background: transparent;
+    border: 1px solid var(--gold-line);
+    color: var(--gold);
+    border-radius: 4px;
+    padding: 4px 9px;
+    font: 600 11px/1 var(--sans);
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  .copy-note-btn:hover { background: var(--gold-soft); }
+  /* "Imported" block in the details panel — plum-tinted like the inline
+     pill so the two read as one signal. Its button re-runs the analysis
+     against the signed-in user's profile. */
+  .details-block[data-imported] { border-color: var(--plum); background: var(--plum-soft); }
+  .details-block[data-imported] .details-block__h { color: var(--plum); }
+  .reanalyze-btn {
+    background: transparent;
+    border: 1px solid var(--plum);
+    color: var(--plum);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font: 600 11px/1 var(--sans);
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .reanalyze-btn:hover { background: var(--plum); color: var(--bg); }
+  .reanalyze-btn:disabled { opacity: 0.6; cursor: progress; }
+
+  /* Stat cards above the table */
+  .apply-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .apply-stats__cell {
+    padding: 10px 14px 8px;
+    box-shadow: inset -1px 0 0 0 var(--line-soft), inset 0 -1px 0 0 var(--line-soft);
+    display: flex; flex-direction: row; align-items: baseline; gap: 10px;
+    min-width: 0;
+  }
+  .apply-stats__val {
+    font: 700 20px/1.1 var(--sans);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .apply-stats__val[data-tone="gold"]  { color: var(--gold); }
+  .apply-stats__val[data-tone="ember"] { color: var(--ember); }
+  .apply-stats__val[data-tone="moss"]  { color: var(--moss); }
+  .apply-stats__val[data-tone="brick"] { color: var(--brick); }
+  .apply-stats__val[data-tone="ink-4"] { color: var(--ink-4); }
+  .apply-stats__lab {
+    font: 600 10px/1.2 var(--mono);
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="page-head">
+    <div>
+      <div class="page-head__eyebrow">Direct</div>
+      <h1 class="page-head__title">Apply</h1>
+      <p class="page-head__lead">Every job the scanner has analyzed, with your status on each.</p>
+    </div>
+    <div class="page-head__actions">
+      <button class="apply-toolbar__btn" id="parseClipboardBtn" title="Read clipboard, parse, save as Applied for you">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M5 3h6m-7 0v10h8V3M6 1h4v2H6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Apply from clipboard
+      </button>
+      <span class="apply-status" id="applyStatus"></span>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="filter-btn" id="copyLinksBtn" title="Copy visible job links as a space-separated string. Use the input on the right to cap how many — blank = all.">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px;margin-right:5px"><path d="M5 5h6v9H5z M3 3h6v2H3z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></svg>
+        Copy links
+      </button>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" id="copyLinksLimit" value="10" placeholder="all" title="Cap on how many visible links to copy. Clear to copy all." style="width:48px;padding:5px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface-2);color:var(--ink);font:500 12.5px/1 var(--mono);outline:none;text-align:center;-moz-appearance:textfield">
+      <span class="apply-status" id="copyLinksStatus"></span>
+    </div>
+  </div>
+
+  <div class="apply-stats" id="applyStats"></div>
+
+  <div class="filters" style="flex-direction:column;align-items:stretch;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="applySearch" class="search-box" placeholder="Search title, company, location…" style="flex:1;min-width:220px;max-width:380px">
+      <div id="applyPlatformPills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+    <div id="applyStatusPills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div id="applyContactPills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button id="rescanScoreBtn" class="filter-btn" style="display:none" title="Re-scan jobs the scanner scored 1. A 1 usually means the job description hadn't rendered when the scanner ran, so it graded an almost-empty page. This clears their cached verdict and re-opens the job pages so the extension analyses them properly.">
+        <span id="rescanScoreLabel">Rescan score-1</span>
+      </button>
+      <button id="rescanLiBtn" class="filter-btn" style="display:none" title="Re-opens EVERY LinkedIn job whose 'employees on LinkedIn' count is missing, in batches; the extension rescans each one as it loads. The count in the label is how many are outstanding.">
+        <span id="rescanLiLabel">Rescan missing LI count</span>
+      </button>
+      <button id="reanalyzeImportedBtn" class="filter-btn" style="display:none" title="Rows pulled in by the peer sync carry the peer's verdict and score. This re-runs the analysis on every loaded imported row against YOUR profile, 10 at a time. The count is how many loaded rows are still imported.">
+        <span id="reanalyzeImportedLabel">Re-analyze imported</span>
+      </button>
+      <span style="flex:1"></span>
+      <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--ink-2);cursor:pointer" title="When you reject the top row, the new top row auto-expands so its details/refs are immediately visible.">
+        <input type="checkbox" id="autoExpandFirstChk" style="margin:0">
+        Auto-expand next on reject
+      </label>
+      <button id="tailorResumesBtn" class="filter-btn" title="Tailor a resume for every pending job that doesn't have one yet. Runs the normal tailoring pipeline per job and drops the PDFs in ~/Downloads/a-tailored-resumes/<Company>/. Each row then shows its ATS score — click the score to read the resume.">
+        <span id="tailorResumesLabel">✦ Tailor resumes</span>
+      </button>
+      <button id="sortResumesBtn" class="filter-btn" title="Number the ~/Downloads resume folders to match this table's current order, so your file manager lists them top-to-bottom in the same sequence you're working the queue.">↓₁ Order resume folders</button>
+      <label style="font:600 11px/1 var(--mono);letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3)">Sort</label>
+      <select id="applySortSelect" class="search-box" style="padding:5px 8px;font-size:13px">
+        <option value="newest">Newest first</option>
+        <option value="applied_desc">Recently applied ↓</option>
+        <option value="date_desc">Date ↓</option>
+        <option value="date_asc">Date ↑</option>
+        <option value="score_desc">Score ↓</option>
+        <option value="score_asc">Score ↑</option>
+        <option value="applicants_asc">Applicants ↑ (least crowded)</option>
+        <option value="applicants_desc">Applicants ↓ (most popular)</option>
+        <option value="employees_desc">Employees ↓</option>
+        <option value="employees_asc">Employees ↑</option>
+        <option value="exp_desc">Experience ↓</option>
+        <option value="exp_asc">Experience ↑</option>
+        <option value="title_asc">Title A→Z</option>
+        <option value="title_desc">Title Z→A</option>
+        <option value="verdict_desc">Verdict (good first)</option>
+        <option value="easyapply_first">Easy Apply first</option>
+        <option value="type_asc">Type A→Z</option>
+        <option value="type_desc">Type Z→A</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="results-meta" id="resultsMeta">Loading…</div>
+
+  <div class="apply-table-wrap">
+    <table class="apply-table">
+      <thead><tr id="applyHead"></tr></thead>
+      <tbody id="applyBody">
+        <tr><td colspan="4" class="empty-row" style="padding:24px;color:var(--ink-3)">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="loadMoreWrap" style="text-align:center;padding:18px 0;display:none">
+    <button id="loadMoreBtn" class="filter-btn" style="padding:9px 26px;font-size:0.85rem">Load more</button>
+  </div>
+</div>
+
+<!-- Extraction-debug modal. Opens when a row's debug icon is clicked.
+     Content is filled by showDebug() inside the inline script. -->
+<div id="debugOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:24px"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div id="debugBody" style="background:var(--surface);border:1px solid var(--line);border-radius:10px;max-width:980px;width:100%;color:var(--ink)"></div>
+</div>
+
+<script>
+(() => {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const STATUS_LABELS = {
+    pending:      'Pending',
+    applied:      'Applied',
+    interviewing: 'Interviewing',
+    success:      'Success',
+    rejected:     'Rejected',
+  };
+
+  // Reject is ONLY from Pending — it's a row-level "don't bother applying"
+  // mark on the job itself. There's no per-stage "company rejected me"
+  // tracker because at this volume (2000+ applies) marking every
+  // company-side rejection by hand is busywork. The interesting
+  // transition is Applied → Interviewing: that's when a company engages
+  // back and the operator wants to look up the role / contact / connect
+  // note. Reset is the universal undo on every non-pending state.
+  const NEXT_ACTIONS = {
+    pending:      [['apply',     'Apply',     'applied'], ['reject', 'Reject', 'rejected']],
+    applied:      [['interview', 'Interview', 'interviewing'], ['reset', 'Reset', 'pending']],
+    interviewing: [['success',   'Success',   'success'],      ['reset', 'Reset', 'pending']],
+    rejected:     [['reset',     'Reset',     'pending']],
+    success:      [['reset',     'Reset',     'pending']],
+  };
+
+  const expandedRows = new Set();
+
+  // The signed-in operator. Every status read (`j.users[me]`) and every
+  // status write is keyed by this name, so the page refuses to render
+  // without it rather than silently showing an empty pipeline.
+  let me = '';
+  let currentItems = [];
+  // Total rows matching the current filter set, from the server's
+  // countJobs over the same filter spec. Surfaced as "showing X of Y" in
+  // the results-meta line so the user doesn't have to scroll to estimate.
+  let totalMatching = 0;
+  let searchQuery = '';
+  let platform = '';
+  // Default to Pending so the page lands on "what's left for me to apply to".
+  let statusFilter = 'pending';
+  // "Has contact" filter — when true, only rows whose JD surfaced an
+  // external apply channel (email/form/ATS/WhatsApp) are shown. Single
+  // bucket: kind doesn't matter, only presence.
+  let hasContactFilter = false;
+  // Sort key, see SORT_FIELDS in services/apply/job-store.js.
+  let sortKey = 'newest';
+  let searchDebounce = null;
+
+  async function loadUsers() {
+    const r = await fetch('/api/apply/users');
+    const body = await r.json();
+    if (!r.ok || body?.error) {
+      // Surface server-side errors verbatim rather than letting them
+      // cascade into a cryptic "Cannot read properties of undefined" later.
+      throw new Error(body?.error || `users API: HTTP ${r.status}`);
+    }
+    me = typeof body?.currentUser === 'string' ? body.currentUser.trim() : '';
+    if (!me) {
+      // The boot handler prints this in the results line, so it is the
+      // one message a fresh install sees before its user exists.
+      throw new Error('no user resolved — create one at /setup, then sign in again');
+    }
+  }
+
+  const PAGE_SIZE = 100;
+
+  function buildJobsQuery(skip) {
+    const p = new URLSearchParams();
+    // Whose rows is never a query parameter: the server takes the user from
+    // the session and picks the scope from `status` alone — `pending` is the
+    // triage queue (rows I have NOT applied to), anything else is my applied
+    // pipeline (see the listJobs note in CLAUDE.md). `me` is still needed
+    // client-side to read `j.users[me]` off each row.
+    if (searchQuery)   p.set('q', searchQuery);
+    if (platform)      p.set('platform', platform);
+    if (statusFilter)  p.set('status', statusFilter);
+    if (hasContactFilter) p.set('hasContact', '1');
+    if (sortKey)       p.set('sort', sortKey);
+    p.set('limit', String(PAGE_SIZE));
+    if (skip)          p.set('skip', String(skip));
+    // Referral hint: bring back matchingConnects per row (matched against
+    // the signed-in user's connections) so we can render the inline
+    // `N refs` pill without a second round-trip.
+    p.set('includeRefs', '1');
+    return p;
+  }
+
+  let hasMore = false;
+
+  // First page: reset list. On filter/scope changes call this.
+  async function loadJobs() {
+    const r = await fetch('/api/apply/jobs?' + buildJobsQuery(0).toString());
+    const data = await r.json();
+    currentItems = data.items || [];
+    totalMatching = typeof data.totalMatching === 'number' ? data.totalMatching : currentItems.length;
+    hasMore = currentItems.length < totalMatching;
+  }
+
+  // Subsequent pages: append to the existing list.
+  async function loadMoreJobs() {
+    const r = await fetch('/api/apply/jobs?' + buildJobsQuery(currentItems.length).toString());
+    const data = await r.json();
+    const next = data.items || [];
+    currentItems = currentItems.concat(next);
+    if (typeof data.totalMatching === 'number') totalMatching = data.totalMatching;
+    hasMore = currentItems.length < totalMatching;
+    return next.length;
+  }
+
+  function renderLoadMore() {
+    document.getElementById('loadMoreWrap').style.display = hasMore ? '' : 'none';
+  }
+
+  // Real per-status counts for the current (platform, q) scope —
+  // independent of the status filter and of the page limit.
+  let scopeStats = { total: 0, pending: 0, applied: 0, interviewing: 0, success: 0, rejected: 0 };
+  async function loadStats() {
+    const p = new URLSearchParams();
+    if (platform)    p.set('platform', platform);
+    if (searchQuery) p.set('q', searchQuery);
+    const r = await fetch('/api/apply/stats?' + p.toString());
+    scopeStats = await r.json();
+  }
+
+  function renderStats() {
+    const tones = { applied: 'gold', interviewing: 'ember', success: 'moss', rejected: 'brick', pending: '' };
+    const order = ['applied', 'interviewing', 'success', 'rejected', 'pending'];
+    document.getElementById('applyStats').innerHTML = [
+      `<div class="apply-stats__cell"><span class="apply-stats__val">${scopeStats.total ?? 0}</span><span class="apply-stats__lab">Total in scope</span></div>`,
+      ...order.map(s =>
+        `<div class="apply-stats__cell"><span class="apply-stats__val" data-tone="${tones[s] || ''}">${scopeStats[s] ?? 0}</span><span class="apply-stats__lab">${STATUS_LABELS[s]}</span></div>`,
+      ),
+    ].join('');
+  }
+
+  // Map sort-keys to the column header they're "anchored to" so we can
+  // highlight + toggle direction by clicking.
+  const SORT_TOGGLE = {
+    score:    { desc: 'score_desc',     asc: 'score_asc' },
+    emp:      { desc: 'employees_desc', asc: 'employees_asc' },
+    exp:      { desc: 'exp_desc',       asc: 'exp_asc' },
+    date:     { desc: 'date_desc',      asc: 'date_asc' },
+    title:    { desc: 'title_desc',     asc: 'title_asc' },
+    applics:  { desc: 'applicants_desc', asc: 'applicants_asc' },
+  };
+  function activeFor(col) {
+    const t = SORT_TOGGLE[col];
+    if (!t) return '';
+    if (sortKey === t.desc) return ' ↓';
+    if (sortKey === t.asc)  return ' ↑';
+    return '';
+  }
+
+  function renderHead() {
+    const head = document.getElementById('applyHead');
+    // Platform pill stays inline with the title in col-job; company moves
+    // to its own column so company names line up across rows.
+    head.innerHTML = `
+      <th class="col-num">#</th>
+      <th class="col-job" data-sortable data-col="title" ${sortKey.startsWith('title') ? 'data-active' : ''}>Job${activeFor('title')}</th>
+      <th class="col-company">Company</th>
+      <th class="col-score" data-sortable data-col="score" ${sortKey.startsWith('score') ? 'data-active' : ''}>Score${activeFor('score')}</th>
+      <th class="col-exp"   data-sortable data-col="exp"   ${sortKey.startsWith('exp')   ? 'data-active' : ''}>Exp${activeFor('exp')}</th>
+      <th class="col-emp"   data-sortable data-col="emp"   ${sortKey.startsWith('employees') ? 'data-active' : ''}>Employees${activeFor('emp')}</th>
+      <th class="col-type">Type</th>
+      <th class="col-applics" data-sortable data-col="applics" ${sortKey.startsWith('applicants') ? 'data-active' : ''}>Apply${activeFor('applics')}</th>
+      <th class="col-date"  data-sortable data-col="date"  ${sortKey.startsWith('date')  ? 'data-active' : ''}>Date${activeFor('date')}</th>
+      <th class="user-col user-status">Status</th>
+      <th class="user-col col-actions"></th>
+    `;
+    head.querySelectorAll('th[data-sortable]').forEach(th => {
+      th.addEventListener('click', () => onHeadSort(th.dataset.col));
+    });
+  }
+
+  // Clicking a sortable header flips its direction (asc ↔ desc). First click
+  // when not active goes desc (= "show me the best/biggest/newest first").
+  function onHeadSort(col) {
+    const t = SORT_TOGGLE[col];
+    if (!t) return;
+    sortKey = sortKey === t.desc ? t.asc : t.desc;
+    document.getElementById('applySortSelect').value = sortKey;
+    reload();
+  }
+
+  // # + Job + Company + Score + Exp + Employees + Type + Apply + Date + Status + Actions
+  const TABLE_COLS = 11;
+
+  function renderRows() {
+    const tbody = document.getElementById('applyBody');
+    if (!currentItems.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${TABLE_COLS}">No jobs match the filters.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = currentItems.map((j, i) => renderRow(j, i)).join('');
+
+    // Status-transition buttons have `data-next` — Apply/Reject/Interview/
+    // Success/Reset. The Note button (data-action="copy-note") and Debug
+    // icon (data-action="debug") share the .stat-btn shape now but have
+    // no data-next, so we filter on it to avoid sending status=undefined
+    // through onAction (which throws "unknown status: undefined" server-side).
+    tbody.querySelectorAll('.stat-btn[data-next]').forEach(btn => {
+      btn.addEventListener('click', () => onAction(btn.dataset.link, btn.dataset.next));
+    });
+    tbody.querySelectorAll('.copy-note-btn').forEach(btn => {
+      btn.addEventListener('click', () => copyConnectNote(btn));
+    });
+    tbody.querySelectorAll('[data-action="reanalyze"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        reanalyzeOne(btn);
+      });
+    });
+    tbody.querySelectorAll('[data-action="copy-note"]').forEach(btn => {
+      btn.addEventListener('click', () => copyNoteInline(btn));
+    });
+    tbody.querySelectorAll('[data-action="debug"]').forEach(btn => {
+      btn.addEventListener('click', () => showDebug(btn.dataset.jobid));
+    });
+    tbody.querySelectorAll('[data-action="block-company"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        blockCompany(btn);
+      });
+    });
+    tbody.querySelectorAll('[data-action="ext-copy"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyExtValue(btn);
+      });
+    });
+    tbody.querySelectorAll('.refs-pill').forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openRefsPopover(pill);
+      });
+    });
+
+    // Click anywhere on a cell that carries `data-expand-link` toggles the
+    // analysis panel. The job-cell anchors (and any explicit action button)
+    // mark themselves with data-noexpand so clicking THEM doesn't also fire
+    // expand. Delegated handler — one listener instead of one per cell.
+    tbody.querySelectorAll('[data-expand-link]').forEach(cell => {
+      cell.addEventListener('click', (e) => {
+        // If the click originated on (or inside) a noexpand element, bail.
+        if (e.target.closest('[data-noexpand]')) return;
+        if (e.target.closest('button.ico-btn, button.stat-btn, a')) return;
+        toggleDetails(cell.dataset.expandLink);
+      });
+    });
+  }
+
+  // True when the row has any scanner-side data worth showing. An imported
+  // row always counts: its details panel carries the "Imported" block even
+  // if the peer's analysis came through empty.
+  function hasAnalysis(j) {
+    return !!(j.verdict || j.score != null || j.summary ||
+              (j.red_flags && j.red_flags.length) ||
+              (j.key_skills_match && j.key_skills_match.length) ||
+              (j.key_skills_missing && j.key_skills_missing.length) ||
+              j.companyDetails || j.connectNote || j.apply_recommendation ||
+              j.importedFrom);
+  }
+
+  // Peer-import pill — sits right after the platform pill. The row was
+  // pulled in by the peer sync, so its verdict/score describe how well the
+  // job fits the PEER, not the signed-in user. The server drops
+  // `importedFrom` the moment a fresh analysis is written, so the pill
+  // disappears on its own after a re-analyze.
+  function renderImportedPill(j) {
+    const imp = j.importedFrom;
+    if (!imp) return '';
+    const label = imp.label || 'peer';
+    const at = imp.at ? new Date(imp.at).toLocaleString() : '';
+    const tip = `Imported from ${label}${at ? ` · ${at}` : ''}`;
+    return `<span class="platform-pill platform-pill--inline" data-imported title="${esc(tip)}">↓ ${esc(label)}</span>`;
+  }
+
+  // Inline "N refs" pill — shown when the signed-in user has connections at
+  // this row's company. data-new=true paints the ember dot so the user
+  // notices a freshly-scraped connect on a row they've already glanced at.
+  function renderRefsPill(j) {
+    const m = j.matchingConnects;
+    if (!Array.isArray(m) || !m.length) return '';
+    const hasNew = m.some(c => c.isNew);
+    const label = m.length === 1 ? '1 ref' : `${m.length} refs`;
+    return `<span class="refs-pill" data-refs-link="${esc(j.jobLink)}" data-new="${hasNew}" data-noexpand title="${m.length} connection${m.length === 1 ? '' : 's'} match this company">${label}</span>`;
+  }
+
+  // Tailored-resume pill. Three states: a live run in progress on this row,
+  // a finished resume (click to read it), or nothing at all — a row with no
+  // tailored resume shows no pill rather than an empty placeholder.
+  function renderAtsPill(j) {
+    const live = tailorRunItems[j.jobId];
+    if (live && live.status === 'running') {
+      return `<span class="ats-pill" data-state="running" data-noexpand title="Tailoring…">···</span>`;
+    }
+    if (live && live.status === 'failed') {
+      return `<span class="ats-pill" data-state="failed" data-noexpand title="${esc(live.error || 'failed')}">✗ ATS</span>`;
+    }
+    const r = tailorResults[j.jobId];
+    if (!r) return '';
+    const n = r.atsScore;
+    if (!Number.isFinite(n)) return '';
+    const band = n >= 75 ? 'high' : n >= 55 ? 'mid' : 'low';
+    const when = r.generatedAt ? new Date(r.generatedAt).toLocaleString() : '';
+    // The score lives in mongo but the PDF lives on disk, and the two can
+    // disagree. Only flag it while the job is still actionable: once applied or
+    // rejected the outbox retires the file ON PURPOSE, and marking those would
+    // put a warning on hundreds of rows where nothing is wrong. On a pending
+    // row it means the opposite — the file went missing and the next tailor
+    // run will rebuild it.
+    const sub = j.users?.[me];
+    const stillPending = !(sub && sub.applied) && j.rowStatus !== 'rejected';
+    if (r.hasLocalPdf === false && stillPending) {
+      const gone = `ATS ${n}${when ? ` · ${when}` : ''} — the analysis is kept, but the PDF is no longer on disk. A pending job will be regenerated by the next tailor run.`;
+      return `<span class="ats-pill" data-state="nofile" data-variant="${esc(r.variantId)}" data-noexpand title="${esc(gone)}">ATS ${n} ⚠</span>`;
+    }
+    const tip = `ATS ${n}${r.keywordExact != null ? ` · ${r.keywordExact}% keywords` : ''}${r.hardReject ? ' · HARD REJECT' : ''}${r.model ? ` · ${r.model}` : ''}${when ? ` · ${when}` : ''} — click to read the tailored resume`;
+    return `<span class="ats-pill" data-band="${band}" data-variant="${esc(r.variantId)}" data-noexpand title="${esc(tip)}">ATS ${n}</span>`;
+  }
+
+  function renderRow(j, index) {
+    const created = j.createdAt ? new Date(j.createdAt).toLocaleDateString() : '';
+    const expanded = expandedRows.has(j.jobLink);
+    const showExpand = hasAnalysis(j);
+
+    // Employees cell — prefer the actual on-LinkedIn count, fall back to bucket.
+    const cd = j.companyDetails || {};
+    const empCell = cd.employeesOnLinkedIn
+      ? `${esc(cd.employeesOnLinkedIn)}${cd.employeeCount ? ` <span style="color:var(--ink-4)">(${esc(cd.employeeCount)})</span>` : ''}`
+      : (cd.employeeCount ? esc(cd.employeeCount) : '<span style="color:var(--ink-4)">—</span>');
+
+    // EXP — prefer the compact numeric form. If we have a min year we show
+    // "3+" / "2-5" / "3"; the raw AI-returned string (which can be a full
+    // sentence) goes to the title attribute so hovering reveals it.
+    let expCell;
+    if (j.experienceYearsMin != null) {
+      const mn = j.experienceYearsMin;
+      const mx = j.experienceYearsMax;
+      const compact = (mx == null) ? `${mn}+`
+                    : (mn === mx)  ? `${mn}`
+                    :                `${mn}–${mx}`;
+      expCell = `<span title="${esc(j.experience_required || '')}">${compact} yrs</span>`;
+    } else if (j.experience_required) {
+      expCell = `<span title="${esc(j.experience_required)}">${esc(j.experience_required)}</span>`;
+    } else {
+      expCell = '<span style="color:var(--ink-4)">—</span>';
+    }
+
+    const scoreCell = j.score != null
+      ? `<span class="score-num" data-verdict="${esc(j.verdict || '')}">${j.score}</span>`
+      : '<span style="color:var(--ink-4)">—</span>';
+
+    // Type cell — "Full-time · On-site" / "Contract · Remote" / etc.
+    const typeBits = [j.jobType, j.workMode].filter(Boolean);
+    const typeCell = typeBits.length
+      ? typeBits.join(' · ')
+      : '<span style="color:var(--ink-4)">—</span>';
+
+    // Apply cell — applicants count + EASY APPLY tag if available.
+    const applicants = j.applicantsCount || (j.applicantsNumeric != null ? String(j.applicantsNumeric) : null);
+    const applicsCell = applicants
+      ? `${esc(applicants)}${j.easyApply ? '<span class="ea-tag">EASY APPLY</span>' : ''}`
+      : (j.easyApply ? '<span class="ea-tag">EASY APPLY</span>' : '<span style="color:var(--ink-4)">—</span>');
+
+    // The entire job cell (and the expand chevron column) is the click
+    // target for show/hide analysis — clicking the title link itself still
+    // opens the job page in a new tab (the link's click event stops bubbling
+    // via the data-noexpand attribute below).
+    const expandAttrs = showExpand
+      ? ` data-expand-link="${esc(j.jobLink)}"`
+      : '';
+    const mainRow = `
+      <tr>
+        <td class="col-num"${expandAttrs} style="${showExpand ? 'cursor:pointer' : ''}" title="${showExpand ? (expanded ? 'Click to hide analysis' : 'Click to show analysis') : ''}">${(index ?? 0) + 1}</td>
+        <td class="col-job"${expandAttrs}>
+          <div class="job-cell__title">${j.jobLink ? `<a href="${esc(j.jobLink)}" target="_blank" rel="noopener" data-noexpand>${esc(j.title || '(untitled)')}</a>` : esc(j.title || '(untitled)')}<span class="platform-pill platform-pill--inline" data-platform="${esc(j.platform)}">${esc(j.platform || '—')}</span>${renderImportedPill(j)}${renderRefsPill(j)}${renderAtsPill(j)}${renderExtStrip(j.externalApply)}</div>
+        </td>
+        <td class="col-company">
+          <span class="col-company__name">${esc(j.company || '—')}</span>
+          ${j.company ? `<button class="ico-btn block-co-btn" data-action="block-company" data-company="${esc(j.company)}" data-noexpand title="Block this company everywhere — auto-rejects every existing row + filters future scans">⊘</button>` : ''}
+          ${j.location ? `<span class="col-company__loc">${esc(j.location)}</span>` : ''}
+        </td>
+        <td class="col-score">${scoreCell}</td>
+        <td class="col-exp">${expCell}</td>
+        <td class="col-emp">${empCell}</td>
+        <td class="col-type">${typeCell}</td>
+        <td class="col-applics">${applicsCell}</td>
+        <td class="col-date">${created}</td>
+        ${renderUserCell(j)}
+      </tr>
+    `;
+    if (!expanded || !showExpand) return mainRow;
+    return mainRow + `<tr class="details-row"><td colspan="${TABLE_COLS}">${renderDetails(j)}</td></tr>`;
+  }
+
+  // Analysis details panel. Layout: left column has summary / recommendation /
+  // skills / red flags, right column has company facts + the connect note.
+  function renderDetails(j) {
+    const cd = j.companyDetails || {};
+    const summary = j.summary || '';
+    const recommendation = j.apply_recommendation || '';
+    const matches = (j.key_skills_match || []).map(s => `<span class="skill-tag" data-kind="match">${esc(s)}</span>`).join('');
+    const missing = (j.key_skills_missing || []).map(s => `<span class="skill-tag" data-kind="missing">${esc(s)}</span>`).join('');
+    const flags = (j.red_flags || []).map(f => `<div class="red-flag-item">${esc(f)}</div>`).join('');
+    const blocked = (j.blockedReasons || []).map(f => `<div class="red-flag-item">${esc(f)}</div>`).join('');
+
+    // [label, value, isHtml]. Every value is escaped unless the row says
+    // otherwise — the one pre-rendered row is flagged explicitly. Trust is
+    // never inferred from the value: peer-imported rows carry these strings
+    // verbatim from someone else's database, and sniffing for "<a " would let
+    // a crafted industry or salary field run as HTML in this origin.
+    const companyRows = [];
+    if (cd.industry)            companyRows.push(['Industry', cd.industry]);
+    if (cd.employeeCount)       companyRows.push(['Employees', cd.employeeCount]);
+    if (cd.employeesOnLinkedIn) companyRows.push(['On LinkedIn', cd.employeesOnLinkedIn]);
+    if (cd.followers)           companyRows.push(['Followers', cd.followers]);
+    if (cd.listed === true)     companyRows.push(['Listed', 'Public']);
+    if (cd.listed === false)    companyRows.push(['Listed', 'Private']);
+    if (cd.companyLinkedIn && /^https?:\/\//i.test(cd.companyLinkedIn)) {
+      companyRows.push(['LinkedIn', `<a href="${esc(cd.companyLinkedIn)}" target="_blank" rel="noopener">${esc(cd.companyLinkedIn.replace(/^https?:\/\//, ''))}</a>`, true]);
+    }
+    if (j.salary)               companyRows.push(['Salary', j.salary]);
+    if (j.experience_required)  companyRows.push(['Experience', j.experience_required]);
+    if (j.posted_relative)      companyRows.push(['Posted', j.posted_relative]);
+
+    // Imported rows lead with a warning: everything below it (verdict,
+    // score, skills match) was scored against the peer's resume. The button
+    // replaces it with an analysis against the signed-in user's own profile.
+    const imp = j.importedFrom;
+    let importedBlock = '';
+    if (imp) {
+      const label = imp.label || 'a peer';
+      const analyzedAt = imp.peerAnalyzedAt ? new Date(imp.peerAnalyzedAt).toLocaleDateString() : '';
+      const theirStatus = imp.peerRowStatus ? ` Their row status was "${imp.peerRowStatus}".` : '';
+      importedBlock = `<div class="details-block" data-imported><div class="details-block__h">Imported</div>` +
+        `<div class="details-block__body">This analysis — verdict, score and skills match — was computed against ${esc(label)}'s profile${analyzedAt ? ` on ${esc(analyzedAt)}` : ''}, not yours.${esc(theirStatus)}</div>` +
+        `<button class="reanalyze-btn" type="button" data-action="reanalyze" data-link="${esc(j.jobLink)}" data-noexpand>Re-analyze against my profile</button></div>`;
+    }
+
+    const left = [
+      importedBlock,
+      renderContactsBlock(j.externalApply),
+      summary       ? `<div class="details-block"><div class="details-block__h">Summary</div><div class="details-block__body">${esc(summary)}</div></div>` : '',
+      recommendation? `<div class="details-block"><div class="details-block__h">Recommendation</div><div class="details-block__body">${esc(recommendation)}</div></div>` : '',
+      (matches || missing) ? `<div class="details-block"><div class="details-block__h">Skills</div><div>${matches}${missing}</div></div>` : '',
+      (flags || blocked)   ? `<div class="details-block"><div class="details-block__h">Red flags</div>${flags}${blocked}</div>` : '',
+      j.company_assessment ? `<div class="details-block"><div class="details-block__h">Company</div><div class="details-block__body">${esc(j.company_assessment)}</div></div>` : '',
+    ].join('');
+
+    const right = [
+      companyRows.length
+        ? `<div class="details-block"><div class="details-block__h">Facts</div><dl class="meta-kv">${companyRows.map(([k, v, html]) => `<dt>${esc(k)}</dt><dd>${html ? v : esc(String(v))}</dd>`).join('')}</dl></div>`
+        : '',
+      j.connectNote
+        ? `<div class="details-block"><div class="details-block__h">Connect note</div><div class="connect-note">${esc(j.connectNote)}</div><button class="copy-note-btn" data-note="${esc(j.connectNote)}">Copy note</button></div>`
+        : '',
+    ].join('');
+
+    return `<div class="details-panel"><div>${left || '<div class="details-block"><div class="details-block__body" style="color:var(--ink-3)">No analysis yet.</div></div>'}</div><div>${right}</div></div>`;
+  }
+
+  function toggleDetails(jobLink) {
+    if (expandedRows.has(jobLink)) expandedRows.delete(jobLink);
+    else expandedRows.add(jobLink);
+    renderRows();
+  }
+
+  async function copyConnectNote(btn) {
+    const note = btn.dataset.note || '';
+    try {
+      await navigator.clipboard.writeText(note);
+      const old = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = old; }, 1500);
+    } catch (e) {
+      btn.textContent = 'Copy blocked';
+      setTimeout(() => { btn.textContent = 'Copy note'; }, 2000);
+    }
+  }
+
+  // External-apply chips: render one button per non-empty channel detected
+  // in jobText. Click copies all values of that kind (newline-joined when
+  // there are multiple) to the clipboard so the user can paste straight
+  // into Gmail / WhatsApp / dialer / browser. Tooltip shows the actual
+  // values so a quick hover answers "what's there" before any click.
+  // Normalize the externalApply payload: new buckets (emails/phones/links)
+  // are the canonical shape, but until the backfill rewrites every row,
+  // some docs still carry legacy forms/ats/whatsapp. Fold them all into
+  // the three new buckets so the UI is shape-agnostic.
+  function extBuckets(ext) {
+    if (!ext) return { emails: [], phones: [], links: [] };
+    const emails = [...(ext.emails || [])];
+    const phones = [];
+    const links  = [...(ext.links || [])];
+    for (const v of ext.whatsapp || []) {
+      // Legacy: whatsapp held a mix of phone numbers + wa.me URLs.
+      if (/^https?:\/\//i.test(v)) links.push(v); else phones.push(v);
+    }
+    for (const v of (ext.phones || [])) phones.push(v);
+    for (const f of ext.forms || []) links.push(f.url || f);
+    for (const a of ext.ats   || []) links.push(a.url || a);
+    return {
+      emails: [...new Set(emails)],
+      phones: [...new Set(phones)],
+      links:  [...new Set(links)],
+    };
+  }
+
+  // External-apply chips: one button per non-empty bucket. Click copies all
+  // values of that kind so the user can paste straight into Gmail / dialer
+  // / browser. Tooltip shows the actual values so a quick hover answers
+  // "what's there" before any click.
+  function renderExtStrip(ext) {
+    const b = extBuckets(ext);
+    const chip = (kind, glyph, values, tipLabel) => {
+      const payload = values.join('\n');
+      const tip = `${tipLabel} — click to copy\n${values.join('\n')}`;
+      return `<button class="ext-chip" type="button" data-action="ext-copy" data-noexpand data-kind="${kind}" data-copy="${esc(payload)}" title="${esc(tip)}">${glyph}</button>`;
+    };
+    const chips = [];
+    if (b.emails.length) chips.push(chip('email', '@', b.emails, 'Email'));
+    if (b.phones.length) chips.push(chip('phone', '☎', b.phones, 'Phone'));
+    if (b.links.length)  chips.push(chip('link',  '↗', b.links,  'Link'));
+    return chips.length ? `<span class="ext-strip">${chips.join('')}</span>` : '';
+  }
+
+  // Contacts block for the analysis-panel left column. Lists each
+  // detected email/phone/link as its own pill-row so the user can copy
+  // (click chip) OR open (click link) without leaving the expansion. URL
+  // entries are anchor tags that open in a new tab; emails are mailto:;
+  // phones are tel:. The standalone copy chip next to each value mirrors
+  // the inline-chip behavior so the user always has a one-click copy.
+  function renderContactsBlock(ext) {
+    const b = extBuckets(ext);
+    if (!b.emails.length && !b.phones.length && !b.links.length) return '';
+    const row = (kind, glyph, href, label, copyVal) => `
+      <div class="contact-row">
+        <span class="contact-row__glyph" data-kind="${kind}">${glyph}</span>
+        <a class="contact-row__val" href="${esc(href)}" target="_blank" rel="noopener" data-noexpand>${esc(label)}</a>
+        <button class="contact-row__copy" type="button" data-action="ext-copy" data-noexpand data-kind="${kind}" data-copy="${esc(copyVal)}" title="Copy">⧉</button>
+      </div>`;
+    const rows = [];
+    for (const e of b.emails) rows.push(row('email', '@', `mailto:${e}`, e, e));
+    for (const p of b.phones) rows.push(row('phone', '☎', `tel:${p}`, p, p));
+    for (const l of b.links)  rows.push(row('link',  '↗', l, l.replace(/^https?:\/\//, ''), l));
+    return `<div class="details-block"><div class="details-block__h">Contacts</div><div class="contacts-list">${rows.join('')}</div></div>`;
+  }
+
+  // Click handler for ext-copy chips. Copies the value, flashes the chip
+  // for ~1s so the user sees "yes it copied". Falls back to a brick toast
+  // if writeText rejects (insecure context, permissions). Matches the
+  // toast pattern the copy-note button uses.
+  async function copyExtValue(btn) {
+    const text = btn.dataset.copy || '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.dataset.toast = 'ok';
+    } catch {
+      btn.dataset.toast = 'err';
+    }
+    setTimeout(() => { delete btn.dataset.toast; }, 1100);
+  }
+
+  function renderUserCell(j) {
+    const sub = j.users?.[me];
+    // Display priority: my active state > row-level rejected > pending.
+    // Row-level rejected only shows while I haven't applied — it's a mark
+    // on the job ("don't bother"), not on my application.
+    const status = (sub && sub.applied)
+      ? (sub.status || 'applied')
+      : (j.rowStatus === 'rejected' ? 'rejected' : 'pending');
+    const actions = NEXT_ACTIONS[status] || [];
+    const updated = sub?.statusUpdatedAt || sub?.appliedAt || j.rejectedAt || null;
+
+    const statusCell = `
+      <td class="user-col user-status">
+        <span class="stat-pill" data-status="${status}">${STATUS_LABELS[status]}</span>
+        ${updated ? `<span class="stat-date">${new Date(updated).toLocaleDateString()}</span>` : ''}
+      </td>`;
+
+    // Inline action row: Apply / Reject / etc. transition buttons, plus the
+    // density extras — Open (new tab), Note (copy connect-note to clipboard
+    // without opening the expand panel), Debug (show extraction snapshot).
+    const transitionBtns = actions.map(([action, label, next]) => {
+      const tone = action === 'apply' ? 'apply'
+                 : action === 'reject' ? 'reject'
+                 : action === 'success' ? 'ok'
+                 : '';
+      return `<button class="stat-btn" data-action="${action}" data-next="${next}" data-link="${esc(j.jobLink)}" ${tone ? `style="border-color:var(--${tone === 'apply' ? 'gold-line' : tone === 'reject' ? 'brick' : 'moss'})"` : ''}>${label}</button>`;
+    }).join('');
+
+    // Density extras — Note and Debug — sit alongside the transition
+    // buttons on every row.
+    //
+    // The Note button is ALWAYS shown when we have a title+company to feed
+    // the model. Behavior: copy the existing note if one exists, otherwise
+    // hit /api/ext/connect-note to generate + save + copy in one shot.
+    // Same UX as the original dashboard's Note button.
+    // Note is a labeled button (more discoverable than the clipboard
+    // glyph). Debug stays as an icon — it's diagnostic-only and rarely
+    // used.
+    const canNote = !!(j.title && j.company);
+    const extras = `
+      ${canNote ? `<button class="stat-btn note-btn" data-action="copy-note"
+          data-note="${esc(j.connectNote || '')}"
+          data-link="${esc(j.jobLink)}"
+          data-jobid="${esc(j.jobId || '')}"
+          data-title="${esc(j.title)}"
+          data-company="${esc(j.company)}"
+          data-noexpand
+          title="${j.connectNote ? 'Copy connect note' : 'Generate + copy connect note'}">Note</button>` : ''}
+      ${j.jobId ? `<button class="ico-btn" data-action="debug" data-jobid="${esc(j.jobId)}" data-noexpand title="Show extraction debug">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>` : ''}
+    `;
+
+    const actionsCell = `
+      <td class="user-col col-actions">
+        <div class="action-row">
+          ${transitionBtns}
+          ${extras}
+        </div>
+      </td>`;
+    return statusCell + actionsCell;
+  }
+
+  // Inline Note button. Two behaviors in one click, matching the old
+  // dashboard's Note button:
+  //   • If we already have a connectNote on the row → copy to clipboard.
+  //   • Otherwise → call /api/ext/connect-note to generate one (the
+  //     endpoint persists it to mongo so the next click is a fast copy),
+  //     then copy. The button label morphs through the states so the
+  //     user gets visible feedback: Note → Generating… → Copied → Note.
+  async function copyNoteInline(btn) {
+    let note = btn.dataset.note || '';
+    const origLabel = 'Note';
+    const setLabel = (text, toast) => {
+      btn.textContent = text;
+      if (toast) btn.dataset.toast = toast; else delete btn.dataset.toast;
+    };
+    const reset = () => setLabel(origLabel, '');
+
+    if (!note) {
+      setLabel('Generating…', '');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/ext/connect-note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jobId:   btn.dataset.jobid || undefined,
+            jobLink: btn.dataset.link  || undefined,
+            title:   btn.dataset.title,
+            company: btn.dataset.company,
+          }),
+        });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          setLabel('Failed', 'err');
+          btn.title = 'Generate failed: ' + (e.error || `HTTP ${r.status}`);
+          setTimeout(() => { btn.title = 'Generate + copy connect note'; reset(); btn.disabled = false; }, 2500);
+          return;
+        }
+        const data = await r.json();
+        note = data.note || '';
+        btn.dataset.note = note;
+        // Patch the in-memory item so the details panel reflects it
+        // without a full reload.
+        const item = currentItems.find(j => j.jobLink === btn.dataset.link);
+        if (item) {
+          item.connectNote = note;
+          item.connectNoteAt = new Date().toISOString();
+        }
+      } catch (e) {
+        setLabel('Failed', 'err');
+        btn.title = 'Generate failed: ' + e.message;
+        setTimeout(() => { reset(); btn.disabled = false; }, 2500);
+        return;
+      }
+      btn.disabled = false;
+    }
+
+    if (!note) {
+      setLabel('Empty', 'err');
+      setTimeout(reset, 2000);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(note);
+      setLabel('Copied', 'ok');
+      btn.title = 'Copied!';
+      setTimeout(() => { btn.title = 'Copy connect note'; reset(); }, 2000);
+    } catch (e) {
+      setLabel('Copy blocked', 'err');
+      btn.title = 'Copy blocked: ' + (e.message || 'permission denied');
+      setTimeout(reset, 2500);
+    }
+  }
+
+  // Msg-button companion: copy the row's connect note to clipboard,
+  // generating one on the fly if missing. Mirrors copyNoteInline's
+  // generate-then-copy flow but skinned for the popover Msg button —
+  // the caller has already opened the LinkedIn DM tab synchronously, so
+  // this function only needs to land the note in the clipboard before
+  // the user pastes.
+  async function handleMsgCopyNote(btn, job) {
+    const origLabel = btn.textContent;
+    const setToast = (toast, label) => {
+      if (toast) btn.dataset.toast = toast; else delete btn.dataset.toast;
+      if (label != null) btn.textContent = label;
+    };
+    const reset = () => setToast('', origLabel);
+    let note = job?.connectNote || '';
+    if (!note) {
+      setToast('pending', '…');
+      try {
+        const r = await fetch('/api/ext/connect-note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jobId:   job.jobId || undefined,
+            jobLink: job.jobLink || undefined,
+            title:   job.title,
+            company: job.company,
+          }),
+        });
+        if (!r.ok) { setToast('err', 'Fail'); setTimeout(reset, 1800); return; }
+        const data = await r.json();
+        note = data.note || '';
+        job.connectNote = note;
+        job.connectNoteAt = new Date().toISOString();
+      } catch {
+        setToast('err', 'Fail'); setTimeout(reset, 1800); return;
+      }
+    }
+    if (!note) { setToast('err', 'Empty'); setTimeout(reset, 1800); return; }
+    try {
+      await navigator.clipboard.writeText(note);
+      setToast('ok', 'Copied');
+    } catch {
+      setToast('err', 'Blocked');
+    }
+    setTimeout(reset, 1800);
+  }
+
+  // Refs popover. Anchored to the pill (fixed-position, body-attached so
+  // it escapes the table's overflow). Opening fires mark-seen for the
+  // (signed-in user, jobLink) pair so the NEW dot clears next render.
+  let _refsPopEl = null;
+  function closeRefsPopover() {
+    if (_refsPopEl) { _refsPopEl.remove(); _refsPopEl = null; }
+  }
+  document.addEventListener('click', (e) => {
+    // Click outside the popover (and not on a refs-pill) closes it.
+    if (!_refsPopEl) return;
+    if (_refsPopEl.contains(e.target)) return;
+    if (e.target.classList?.contains('refs-pill')) return;
+    closeRefsPopover();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeRefsPopover(); });
+
+  function openRefsPopover(pillEl) {
+    closeRefsPopover();
+    const jobLink = pillEl.dataset.refsLink;
+    const job = currentItems.find(j => j.jobLink === jobLink);
+    if (!job || !job.matchingConnects?.length) return;
+
+    const pop = document.createElement('div');
+    pop.className = 'refs-pop';
+    pop.innerHTML = `
+      <div class="refs-pop__h">${job.matchingConnects.length} potential referral${job.matchingConnects.length === 1 ? '' : 's'} @ ${esc(job.company || '')}</div>
+      ${job.matchingConnects.map(c => `
+        <div class="refs-pop__row">
+          <div class="refs-pop__photo" ${c.photoUrl ? `style="background-image:url('${esc(c.photoUrl)}')"` : ''}>${c.photoUrl ? '' : esc((c.name || '?').trim().charAt(0).toUpperCase())}</div>
+          <div>
+            <div class="refs-pop__name">
+              <a href="${esc(c.profileUrl)}" target="_blank" rel="noopener">${esc(c.name)}</a>
+              ${c.isNew ? '<span class="refs-pop__new">NEW</span>' : ''}
+            </div>
+            ${c.headline ? `<div class="refs-pop__headline">${esc(c.headline)}</div>` : ''}
+          </div>
+          ${c.messageUrl ? `<a class="refs-pop__msg" href="${esc(c.messageUrl)}" target="_blank" rel="noopener">Msg</a>` : ''}
+        </div>
+      `).join('')}
+    `;
+    document.body.appendChild(pop);
+
+    // Msg click → open LinkedIn DM in a new tab AND auto-copy the connect
+    // note. window.open is fired synchronously inside the click handler so
+    // it survives the popup blocker; the note copy/generate runs async
+    // after. If the row has no note yet, /api/ext/connect-note is called
+    // (same endpoint the Note button uses) — the new tab is already open
+    // by then so the wait doesn't block the user.
+    pop.querySelectorAll('.refs-pop__msg').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = a.getAttribute('href');
+        if (url) window.open(url, '_blank', 'noopener');
+        handleMsgCopyNote(a, job);
+      });
+    });
+
+    // Position below the pill if there's room, otherwise above. Keep clear of
+    // the right edge.
+    const r = pillEl.getBoundingClientRect();
+    const popW = 360; const popH = Math.min(420, pop.scrollHeight);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let left = r.left;
+    if (left + popW > vw - 12) left = vw - popW - 12;
+    if (left < 12) left = 12;
+    let top = r.bottom + 6;
+    if (top + popH > vh - 12) top = Math.max(12, r.top - popH - 6);
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+    _refsPopEl = pop;
+
+    // Mark this row's refs as seen — fire-and-forget, so the popover doesn't
+    // wait on the round-trip. Local state update + next render clears NEW dot.
+    fetch('/api/apply/connections/mark-seen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobLink }),
+    }).catch(() => {});
+    // Clear isNew locally so the pill loses its ember dot without waiting
+    // for a reload.
+    for (const c of job.matchingConnects) c.isNew = false;
+    pillEl.dataset.new = 'false';
+  }
+
+  // Show extraction debug for a job. Pops a modal with the captured HTML +
+  // corpus text + extracted-info summary. Useful when employee-count comes
+  // back null and you want to know why the regex didn't bite.
+  // Block a company globally. Adds it to scanner_filters.blockedCompanies
+  // and marks every existing job_tracker row for that company as
+  // verdict='skip' so the apply table immediately shows them as blocked.
+  // Uses the same endpoint the extension popup uses.
+  async function blockCompany(btn) {
+    const company = btn.dataset.company;
+    if (!company) return;
+    if (!confirm(
+      `Block "${company}"?\n\n` +
+      `Every existing row for this company gets auto-rejected, and future ` +
+      `extension scans will skip jobs from them.`,
+    )) return;
+    const prev = btn.textContent;
+    btn.textContent = '…';
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/ext/filters/block-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const out = await r.json();
+      btn.textContent = '✓';
+      btn.style.background = 'var(--brick-soft)';
+      btn.title = `Blocked. ${out.markedBlocked || 0} row(s) flipped to blocked.`;
+      // Refresh the table so the affected rows show their new blocked state.
+      setTimeout(() => reload(), 400);
+    } catch (err) {
+      btn.textContent = prev;
+      btn.disabled = false;
+      alert(`Block failed: ${err.message}`);
+    }
+  }
+
+  async function showDebug(jobId) {
+    if (!jobId) return;
+    const overlay = document.getElementById('debugOverlay');
+    const body = document.getElementById('debugBody');
+    body.innerHTML = '<div style="padding:24px;color:var(--ink-3)">Loading…</div>';
+    overlay.style.display = 'flex';
+    try {
+      const r = await fetch('/api/ext/debug/' + encodeURIComponent(jobId));
+      if (!r.ok) {
+        // Find the job row so we can give a useful explanation in context.
+        const j = currentItems.find(it => String(it.jobId) === String(jobId));
+        const jobUrl = j?.jobLink;
+        const analyzedAt = j?.analyzedAt ? new Date(j.analyzedAt).toLocaleString() : '(unknown)';
+        body.innerHTML = `
+          <div style="padding:18px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+              <h3 style="margin:0;font:600 16px/1.2 var(--sans)">No debug snapshot for jobId ${esc(jobId)}</h3>
+              <button class="filter-btn" onclick="document.getElementById('debugOverlay').style.display='none'">Close</button>
+            </div>
+            <div style="color:var(--ink-2);font:500 13.5px/1.55 var(--sans)">
+              The legacy extension only kept the <strong>last 100 snapshots</strong> on disk in a rolling buffer, and this row was scanned at <code>${esc(analyzedAt)}</code> — well outside that window.
+            </div>
+            <div style="color:var(--ink-2);font:500 13.5px/1.55 var(--sans)">
+              The new <code>scanner_debug</code> collection keeps 2000 snapshots before LRU-trimming, so going forward this gap shouldn't recur. To capture one now:
+              <ol style="margin:6px 0 0;padding-left:18px;color:var(--ink-3)">
+                <li>Open the job in LinkedIn ${jobUrl ? `(<a href="${esc(jobUrl)}" target="_blank" rel="noopener">↗ direct link</a>)` : ''}</li>
+                <li>The extension auto-re-scans on page load — a fresh snapshot will land in mongo within a few seconds</li>
+                <li>Click the debug icon again here</li>
+              </ol>
+            </div>
+            <details>
+              <summary style="cursor:pointer;font:600 12px/1.2 var(--mono);color:var(--ink-3)">What we know about this row already</summary>
+              <dl class="meta-kv" style="margin-top:8px">
+                <dt>Verdict</dt><dd>${esc(j?.verdict || '—')}${j?.score != null ? ` (${j.score}/10)` : ''}</dd>
+                <dt>Company</dt><dd>${esc(j?.company || '—')}</dd>
+                <dt>Employees</dt><dd>${esc(j?.companyDetails?.employeesOnLinkedIn || j?.companyDetails?.employeeCount || '—')}</dd>
+                <dt>Industry</dt><dd>${esc(j?.companyDetails?.industry || '—')}</dd>
+                <dt>Analyzed at</dt><dd>${esc(analyzedAt)}</dd>
+              </dl>
+            </details>
+          </div>
+        `;
+        return;
+      }
+      const d = await r.json();
+      const ext = d.extractedCompanyInfo || {};
+      const extRows = Object.entries(ext).filter(([_, v]) => v != null && v !== '').map(([k, v]) =>
+        `<dt>${esc(k)}</dt><dd>${esc(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>`).join('');
+      body.innerHTML = `
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:12px;max-height:80vh;overflow:auto">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <h3 style="margin:0;font:600 16px/1.2 var(--sans)">Debug · jobId ${esc(d.jobId)}</h3>
+            <button class="filter-btn" onclick="document.getElementById('debugOverlay').style.display='none'">Close</button>
+          </div>
+          <div style="font:500 12px/1.4 var(--mono);color:var(--ink-3)">
+            ${d.url ? `URL: <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a> · ` : ''}
+            captured ${d.capturedAt || d.savedAt} · about-section ${d.aboutSectionFound ? 'found' : 'NOT FOUND'} · about ${d.aboutTextLength || 0} chars · body ${d.bodyTextLength || 0} chars
+          </div>
+          <div class="details-block">
+            <div class="details-block__h">Extracted company info</div>
+            ${extRows ? `<dl class="meta-kv">${extRows}</dl>` : '<div style="color:var(--ink-3)">(nothing extracted)</div>'}
+          </div>
+          <div class="details-block">
+            <div class="details-block__h">Corpus text — what the regex scanned (truncated for storage)</div>
+            <div style="font:500 11.5px/1.4 var(--mono);color:var(--ink-3);margin-bottom:6px">
+              ${(() => {
+                const stored = (d.corpusText || '').length;
+                const full = d.corpusFullLength || stored;
+                const aboutLen = d.aboutTextLength || 0;
+                const bodyLen = d.bodyTextLength || 0;
+                return `regex saw ~${(bodyLen + aboutLen).toLocaleString()} chars total (about-section ${aboutLen.toLocaleString()} + body up to 80,000) · this snapshot stores ${stored.toLocaleString()} of ${full.toLocaleString()}`;
+              })()}
+            </div>
+            <pre style="white-space:pre-wrap;font:500 11.5px/1.4 var(--mono);max-height:320px;overflow:auto;color:var(--ink-2);background:var(--surface-2);padding:8px 10px;border-radius:4px">${esc(d.corpusText || '')}</pre>
+          </div>
+          <details>
+            <summary style="cursor:pointer;font:600 12px/1.2 var(--mono);color:var(--ink-3)">About-section HTML (raw, ${(d.aboutSectionHtml || '').length} chars)</summary>
+            <pre style="white-space:pre-wrap;font:500 11px/1.4 var(--mono);max-height:300px;overflow:auto;color:var(--ink-3);background:var(--surface-2);padding:8px 10px;border-radius:4px;margin-top:6px">${esc(d.aboutSectionHtml || '(empty)')}</pre>
+          </details>
+        </div>
+      `;
+    } catch (e) {
+      body.innerHTML = `<div style="padding:18px;color:var(--brick)">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function onAction(jobLink, nextStatus) {
+    // Optimistically remove the row from the view BEFORE the round-trip
+    // so the operator can blast through a stack of pendings without
+    // waiting on the network. We rollback if the server rejects.
+    const idx = currentItems.findIndex(j => j.jobLink === jobLink);
+    const removed = idx >= 0 ? currentItems.splice(idx, 1)[0] : null;
+    // Auto-expand-next-on-reject: when the operator rejects the TOP row
+    // and the checkbox is on, queue the new top row's jobLink into the
+    // expandedRows Set BEFORE renderRows() runs, so the panel opens in
+    // the same paint as the row above disappears.
+    if (
+      removed && idx === 0 && nextStatus === 'rejected' &&
+      document.getElementById('autoExpandFirstChk')?.checked &&
+      currentItems[0]
+    ) {
+      expandedRows.add(currentItems[0].jobLink);
+    }
+    if (removed) { renderRows(); }
+
+    // Only send `status`. Let the server figure out the right `applied` flag
+    // based on prior state — sending applied=true for 'rejected' would turn
+    // a reject-from-pending (a row-level "don't bother" mark) into a
+    // per-application "company rejected me" mark. The user is the session;
+    // the server resolves it.
+    const r = await fetch(
+      '/api/apply/jobs?jobLink=' + encodeURIComponent(jobLink),
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      },
+    );
+    if (!r.ok) {
+      // Rollback the optimistic removal.
+      if (removed) currentItems.splice(idx, 0, removed);
+      renderRows();
+      const d = await r.json().catch(() => ({}));
+      alert('Update failed: ' + (d.error || r.status));
+      return;
+    }
+    // The server retires the tailored resume as part of the status change
+    // (it has to — the scanner extension changes status too, and never runs
+    // this code). We just surface what it did.
+    const body = await r.json().catch(() => ({}));
+    if (body.outbox?.removedDirs?.length) toastOutbox(`Removed resume folder: ${removed?.company}`);
+    else if (body.outbox?.removedFiles?.length) toastOutbox(`Removed resume: ${removed?.company} — ${removed?.title}`);
+
+    // Refresh real counts in the background; the row is already gone.
+    loadStats().then(renderStats);
+  }
+
+  // ── Resume outbox (TEMPORARY — ATS experiment) ──
+  // Numbers the company folders to match the queue's current sort order, so a
+  // file manager's alphabetical listing walks top-to-bottom with this table.
+  async function reorderOutbox() {
+    const btn = document.getElementById('sortResumesBtn');
+    const companies = [...new Set(currentItems.map(j => j.company).filter(Boolean))];
+    if (!companies.length) { toastOutbox('No jobs in view to order by'); return; }
+    const prev = btn.textContent;
+    btn.disabled = true; btn.textContent = '⋯';
+    try {
+      const r = await fetch('/api/apply/resume-outbox/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companies }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.status);
+      toastOutbox(d.renamed.length
+        ? `Ordered ${d.renamed.length} resume folder(s) to match this view`
+        : 'Resume folders already in this order');
+    } catch (e) {
+      toastOutbox('Reorder failed: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = prev;
+    }
+  }
+
+  // ── Re-analyze imported rows ──
+  // A row pulled in by the peer sync carries the peer's verdict/score, which
+  // say nothing about how well the job fits ME. POST /api/apply/jobs/reanalyze
+  // re-runs the scanner's analysis on the stored jobText against the signed-in
+  // user's profile; the server clears `importedFrom` when it writes the fresh
+  // analysis, so the pill and the Imported block vanish on the next reload.
+  const REANALYZE_BATCH = 10;   // server caps a call at 50; 10 keeps each round-trip short
+  let reanalyzeRunning = false;
+
+  async function reanalyzeLinks(jobLinks) {
+    const r = await fetch('/api/apply/jobs/reanalyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobLinks }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    return Array.isArray(d.results) ? d.results : [];
+  }
+
+  // Details-panel button: one row. The button stays disabled on success —
+  // the reload that follows replaces the whole panel with the fresh analysis.
+  async function reanalyzeOne(btn) {
+    const jobLink = btn.dataset.link;
+    if (!jobLink || btn.disabled) return;
+    const prev = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Re-analyzing…';
+    try {
+      const results = await reanalyzeLinks([jobLink]);
+      const res = results.find(x => x.jobLink === jobLink) || results[0];
+      if (!res || !res.ok) throw new Error(res?.error || 'no result for this row');
+      toastOutbox(`Re-analyzed against your profile: ${res.verdict || '?'}${res.score != null ? ` · ${res.score}/10` : ''}`);
+      scheduleReload();
+    } catch (e) {
+      toastOutbox('Re-analyze failed: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = prev;
+    }
+  }
+
+  const importedRows = () => currentItems.filter(j => j.importedFrom);
+
+  // Toolbar button label = how many LOADED rows are still imported. Hidden
+  // when there are none; left alone mid-run so the progress label survives
+  // the SSE-driven reloads each server write triggers.
+  function renderReanalyzeButton() {
+    const btn = document.getElementById('reanalyzeImportedBtn');
+    const lab = document.getElementById('reanalyzeImportedLabel');
+    if (!btn || !lab || reanalyzeRunning) return;
+    const n = importedRows().length;
+    btn.style.display = n ? '' : 'none';
+    lab.textContent = `Re-analyze imported (${n})`;
+  }
+
+  async function startReanalyzeImported() {
+    if (reanalyzeRunning) return;
+    const links = importedRows().map(j => j.jobLink).filter(Boolean);
+    if (!links.length) { renderReanalyzeButton(); return; }
+    if (!confirm(
+      `Re-analyze ${links.length} imported job(s) against your profile?\n\n` +
+      `Each one is a model call. The peer's verdict and score are replaced by your own.`,
+    )) return;
+    const btn = document.getElementById('reanalyzeImportedBtn');
+    const lab = document.getElementById('reanalyzeImportedLabel');
+    reanalyzeRunning = true;
+    btn.disabled = true;
+    let done = 0, ok = 0, failed = 0, firstError = '';
+    try {
+      for (let i = 0; i < links.length; i += REANALYZE_BATCH) {
+        const batch = links.slice(i, i + REANALYZE_BATCH);
+        lab.textContent = `Re-analyzing ${done}/${links.length}…`;
+        let results;
+        try {
+          results = await reanalyzeLinks(batch);
+        } catch (e) {
+          // A failed round-trip fails the whole batch; keep going with the
+          // next one rather than abandoning the run halfway.
+          results = batch.map(jobLink => ({ jobLink, ok: false, error: e.message }));
+        }
+        for (const res of results) {
+          if (res.ok) ok++;
+          else { failed++; if (!firstError) firstError = res.error || 'failed'; }
+        }
+        done += batch.length;
+        lab.textContent = `Re-analyzing ${done}/${links.length}…`;
+      }
+    } finally {
+      reanalyzeRunning = false;
+      btn.disabled = false;
+    }
+    toastOutbox(failed
+      ? `Re-analyzed ${ok}/${links.length} — ${failed} failed (${firstError})`
+      : `Re-analyzed ${ok} job(s) against your profile`);
+    scheduleReload();
+  }
+
+  // ── Batch tailoring ──
+  // `tailorResults` is jobId → the newest tailored variant's summary (score,
+  // model, variantId). `tailorRunItems` is jobId → live per-job state while a
+  // run is in flight; it wins over `tailorResults` in the pill so a row shows
+  // "···" the moment its turn comes up rather than staying blank for minutes.
+  let tailorResults = {};
+  let tailorRunItems = {};
+  let tailorRunId = null;
+  let tailorPollTimer = null;
+
+  async function loadTailorResults() {
+    try {
+      const r = await fetch('/api/apply/tailor/results');
+      const d = await r.json();
+      if (r.ok) tailorResults = d.results || {};
+    } catch { /* pills just don't render */ }
+  }
+
+  // How many pending jobs still have no resume — drives the button's label so
+  // the cost of a click is visible before making it.
+  async function loadTailorQueue() {
+    const btn = document.getElementById('tailorResumesBtn');
+    const label = document.getElementById('tailorResumesLabel');
+    if (!btn || !label || tailorRunId) return;
+    try {
+      const r = await fetch('/api/apply/tailor/queue');
+      const d = await r.json();
+      if (!r.ok) return;
+      label.textContent = d.count ? `✦ Tailor ${d.count} resume${d.count === 1 ? '' : 's'}` : '✦ All tailored';
+      btn.disabled = !d.count;
+    } catch { /* leave the default label */ }
+  }
+
+  async function startTailorRun() {
+    const btn = document.getElementById('tailorResumesBtn');
+    if (tailorRunId) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/apply/tailor/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.status);
+      tailorRunId = d.runId;
+      toastOutbox(`Tailoring ${d.total} resume(s) via ${d.provider}/${d.model}`);
+      pollTailorRun();
+    } catch (e) {
+      toastOutbox('Tailoring failed to start: ' + e.message);
+      btn.disabled = false;
+    }
+  }
+
+  // Poll rather than stream: a run is minutes long and the page must survive a
+  // reload mid-run, which an SSE connection tied to the click would not.
+  function pollTailorRun() {
+    clearTimeout(tailorPollTimer);
+    tailorPollTimer = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/apply/tailor/run/${tailorRunId}`);
+        const run = await r.json();
+        if (!r.ok) throw new Error(run.error || r.status);
+
+        tailorRunItems = {};
+        for (const it of run.items || []) tailorRunItems[it.jobId] = it;
+
+        const label = document.getElementById('tailorResumesLabel');
+        if (label) label.textContent = `✦ ${run.done}/${run.total}${run.failed ? ` · ${run.failed} failed` : ''}`;
+
+        // Newly-finished rows need their score, so refresh the result map each
+        // tick; it's a single mirror-free Mongo query and the run is short-lived.
+        await loadTailorResults();
+        renderRows();
+
+        if (run.status === 'running') { pollTailorRun(); return; }
+
+        tailorRunId = null;
+        tailorRunItems = {};
+        const failed = (run.items || []).filter(i => i.status === 'failed');
+        toastOutbox(failed.length
+          ? `Tailored ${run.ok}/${run.total} — ${failed.length} failed (${failed[0].company}: ${failed[0].error})`
+          : `Tailored ${run.ok} resume(s) — check ~/Downloads/a-tailored-resumes/`);
+        renderRows();
+        loadTailorQueue();
+      } catch (e) {
+        tailorRunId = null;
+        tailorRunItems = {};
+        toastOutbox('Lost track of the tailoring run: ' + e.message);
+        document.getElementById('tailorResumesBtn').disabled = false;
+        loadTailorQueue();
+      }
+    }, 2500);
+  }
+
+  // Read the tailored resume in place — the point being to check what the
+  // model actually claimed before uploading the PDF anywhere.
+  async function showResumeViewer(variantId) {
+    const overlay = document.getElementById('resumeOverlay');
+    const panel = document.getElementById('resumePanel');
+    overlay.style.display = 'flex';
+    panel.innerHTML = '<div class="resume-modal__body">Loading…</div>';
+    try {
+      const r = await fetch(`/api/apply/tailor/variant/${encodeURIComponent(variantId)}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.status);
+
+      // Shape comes straight from services/pipeline/ats-scorer.js.
+      const s = d.atsScore || {};
+      const total = Number.isFinite(s.overallScore) ? s.overallScore : null;
+      const scoreLine = [
+        total != null ? `<b>${total}</b> ATS` : '',
+        Number.isFinite(s.keywordExact) ? `· ${s.keywordExact}% keywords (${(s.found || []).length}/${s.totalKeywords ?? '?'})` : '',
+        s.hardReject ? `· <span style="color:var(--ember)">hard reject: ${esc(s.rejectReason || '')}</span>` : '',
+        d.model ? `· ${esc(d.model)}` : '',
+        d.mode ? `· ${esc(d.mode)}` : '',
+        d.generatedAt ? `· ${new Date(d.generatedAt).toLocaleString()}` : '',
+      ].filter(Boolean).join(' ');
+
+      const penalties = (s.penalties || []).map(p => `<div class="red-flag-item">${esc(p)}</div>`).join('');
+      const found = (s.found || []);
+      const missing = (s.missing || []);
+      const bullets = (d.bullets || []).map(b => `<li>${esc(b)}</li>`).join('');
+      const projects = (d.projects || []).filter(p => p.description)
+        .map(p => `<div style="margin-bottom:8px"><b style="color:var(--ink-2)">${esc(p.name)}</b><br>${esc(p.description)}</div>`).join('');
+
+      panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+          <div>
+            <div style="font:600 17px/1.3 var(--sans);color:var(--ink-1)">${esc(d.role || '')}</div>
+            <div style="font:400 13px/1.4 var(--sans);color:var(--ink-3)">${esc(d.company || '')}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            ${d.hasLocalPdf
+              ? `<a class="filter-btn" href="/api/apply/tailor/variant/${encodeURIComponent(d.variantId)}/pdf" target="_blank" rel="noopener">Open PDF</a>`
+              : d.pdfName
+                ? `<a class="filter-btn" href="/api/resumes/${encodeURIComponent(d.pdfName)}" target="_blank" rel="noopener">Open PDF</a>`
+                : `<span style="font:400 12px/1 var(--sans);color:var(--ink-3)">PDF retired</span>`}
+            <button class="filter-btn" data-close-resume>Close</button>
+          </div>
+        </div>
+        <div class="resume-modal__score" style="margin-top:14px">${scoreLine}</div>
+        ${penalties ? `<div class="resume-modal__h">Penalties</div>${penalties}` : ''}
+        ${found.length ? `<div class="resume-modal__h">Keywords hit</div><div>${found.map(k => `<span class="skill-tag" data-kind="match">${esc(k)}</span>`).join('')}</div>` : ''}
+        ${missing.length ? `<div class="resume-modal__h">Keywords still missing</div><div>${missing.map(k => `<span class="skill-tag" data-kind="missing">${esc(k)}</span>`).join('')}</div>` : ''}
+        <div class="resume-modal__h">Headline</div><div class="resume-modal__body">${esc(d.title || '—')}</div>
+        <div class="resume-modal__h">Summary</div><div class="resume-modal__body">${esc(d.summary || '—')}</div>
+        <div class="resume-modal__h">Skills</div><div class="resume-modal__body">${esc(d.skills || '—')}</div>
+        <div class="resume-modal__h">Current-role bullets</div><div class="resume-modal__body"><ul>${bullets || '<li>—</li>'}</ul></div>
+        ${projects ? `<div class="resume-modal__h">Projects</div><div class="resume-modal__body">${projects}</div>` : ''}
+      `;
+    } catch (e) {
+      panel.innerHTML = `<div class="resume-modal__body">Could not load that resume: ${esc(e.message)}<br><br><button class="filter-btn" data-close-resume>Close</button></div>`;
+    }
+  }
+
+  let _outboxToastTimer = null;
+  function toastOutbox(msg) {
+    let el = document.getElementById('outboxToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'outboxToast';
+      el.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;'
+        + 'background:var(--bg-2,#1b1b1b);color:var(--ink-1,#eee);border:1px solid var(--gold-line,#8a6d3b);'
+        + 'border-radius:8px;padding:8px 14px;font-size:12px;box-shadow:0 4px 18px rgba(0,0,0,.45);';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(_outboxToastTimer);
+    _outboxToastTimer = setTimeout(() => { el.style.opacity = '0'; }, 2600);
+  }
+
+  async function parseClipboard() {
+    const btn = document.getElementById('parseClipboardBtn');
+    const status = document.getElementById('applyStatus');
+    btn.disabled = true;
+    status.textContent = 'Reading clipboard…';
+    status.dataset.tone = '';
+    try {
+      const r = await fetch('/api/apply/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await r.json();
+      if (!r.ok) {
+        status.textContent = data.error || 'Parse failed';
+        status.dataset.tone = 'err';
+      } else {
+        status.textContent = `Saved ${data.inserted} new · ${data.refreshed} refreshed (${data.format})`;
+        status.dataset.tone = 'ok';
+        await Promise.all([loadJobs(), loadStats()]);
+        renderAll();
+      }
+    } catch (e) {
+      status.textContent = e.message;
+      status.dataset.tone = 'err';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { status.textContent = ''; status.dataset.tone = ''; }, 8000);
+    }
+  }
+
+  function renderMeta() {
+    // "Showing X of Y matching" makes the page-size cap obvious without
+    // the user having to scroll. Y is the total across every active filter
+    // (status + verdict + platform + search), not just the visible page.
+    const ofTotal = totalMatching > currentItems.length
+      ? ` of ${totalMatching}`
+      : '';
+    document.getElementById('resultsMeta').textContent =
+      `${currentItems.length}${ofTotal} jobs · signed in as ${me}`;
+  }
+
+  function renderPills(rootId, options, currentValue, onPick) {
+    const root = document.getElementById(rootId);
+    root.innerHTML = options.map(([val, label]) =>
+      `<button class="filter-btn ${currentValue === val ? 'active' : ''}" data-val="${esc(val)}">${esc(label)}</button>`,
+    ).join('');
+    root.querySelectorAll('.filter-btn').forEach(b => {
+      b.addEventListener('click', async () => { await onPick(b.dataset.val); });
+    });
+  }
+
+  function renderPlatformPills() {
+    renderPills('applyPlatformPills',
+      [['', 'All platforms'], ['LinkedIn', 'LinkedIn'], ['Naukri', 'Naukri']],
+      platform,
+      async (v) => { platform = v; await Promise.all([loadJobs(), loadStats()]); renderAll(); },
+    );
+  }
+
+  function renderStatusPills() {
+    renderPills('applyStatusPills',
+      [
+        ['',             'All statuses'],
+        ['pending',      'Pending'],
+        ['applied',      'Applied'],
+        ['interviewing', 'Interviewing'],
+        ['success',      'Success'],
+        ['rejected',     'Rejected'],
+      ],
+      statusFilter,
+      async (v) => { statusFilter = v; await loadJobs(); renderAll(); },
+    );
+  }
+
+  // Toggle pill that flips hasContactFilter. Single button so the click is
+  // an on/off rather than a radio choice — the alternative ('Any contact')
+  // is the implicit default state.
+  function renderContactPills() {
+    renderPills('applyContactPills',
+      [['1', 'Has contact']],
+      hasContactFilter ? '1' : '',
+      async () => { hasContactFilter = !hasContactFilter; await loadJobs(); renderAll(); },
+    );
+  }
+
+  // Convenience: re-fetch the current page + stats + re-render.
+  async function reload() {
+    await Promise.all([loadJobs(), loadStats()]);
+    renderAll();
+  }
+
+  // Server-Sent Events: server notifies us when the mirror changes
+  // (a local write, or a row absorbed by the mirror — e.g. a peer import).
+  // We debounce rapid bursts of events into a single reload so a
+  // bulk import doesn't trigger 200 refetches.
+  let _reloadTimer = null;
+  const scheduleReload = () => {
+    clearTimeout(_reloadTimer);
+    _reloadTimer = setTimeout(() => reload(), 600);
+  };
+  try {
+    const es = new EventSource('/api/events');
+    es.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        // Apply page cares about job_tracker (rows) and connections
+        // (the refs popover). Ignore feed-only collections.
+        if (d.collection === 'job_tracker' || d.collection === 'connections') {
+          scheduleReload();
+        }
+      } catch {}
+    };
+    es.onerror = () => { /* browser auto-reconnects */ };
+  } catch { /* SSE unsupported — fall back to manual refresh */ }
+
+  function renderAll() {
+    renderPlatformPills();
+    renderStatusPills();
+    renderContactPills();
+    // Toggle the status column: when the page is filtered to one status
+    // (Pending / Applied / etc.) every row shows the same pill, so the
+    // column is just noise. Hide it via CSS class to keep the layout
+    // logic flat.
+    const table = document.querySelector('.apply-table');
+    if (table) table.classList.toggle('no-status-col', !!statusFilter);
+    renderHead();
+    renderMeta();
+    renderStats();
+    renderRows();
+    renderLoadMore();
+    renderReanalyzeButton();
+  }
+
+  document.getElementById('loadMoreBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('loadMoreBtn');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    try {
+      await loadMoreJobs();
+      renderRows();
+      renderLoadMore();
+      renderReanalyzeButton();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Load more';
+    }
+  });
+
+  async function copyLinks() {
+    const status = document.getElementById('copyLinksStatus');
+    let links = currentItems.map(j => j.jobLink).filter(Boolean);
+    // Optional cap. Blank / 0 / NaN / negative all mean "no cap".
+    const rawCap = document.getElementById('copyLinksLimit')?.value;
+    const cap = Number.parseInt(rawCap, 10);
+    const capped = Number.isFinite(cap) && cap > 0 && cap < links.length;
+    if (capped) links = links.slice(0, cap);
+    if (!links.length) {
+      status.textContent = 'No links to copy'; status.dataset.tone = 'err';
+      setTimeout(() => { status.textContent = ''; status.dataset.tone = ''; }, 3000);
+      return;
+    }
+    const text = links.join(' ');
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = capped
+        ? `Copied ${links.length} link${links.length === 1 ? '' : 's'} (capped from ${currentItems.length})`
+        : `Copied ${links.length} link${links.length === 1 ? '' : 's'}`;
+      status.dataset.tone = 'ok';
+    } catch (e) {
+      status.textContent = 'Clipboard blocked — ' + (e.message || 'use HTTPS or grant permission');
+      status.dataset.tone = 'err';
+    }
+    setTimeout(() => { status.textContent = ''; status.dataset.tone = ''; }, 4000);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // ── Rescan score-1 jobs ────────────────────────────────────────────────
+  // A scanner score of 1 is usually not a verdict, it's a failed scrape: the
+  // job description hadn't rendered when the extension ran, so it graded a
+  // near-empty page. Distinct from the LI-count rescan above — that one opens
+  // COMPANY pages for headcount; this opens the JOB pages themselves.
+  //
+  // The cached verdict has to be cleared first. content.js treats a 200 from
+  // /api/ext/result/:jobId as a cache hit and skips analysis; clear-scan
+  // $unsets verdict (and jobText), which makes that endpoint 404 and pushes
+  // content.js down its full-scan path.
+  // Measured on this dataset: every score-1 row landed between 1551 and 1618
+  // characters — the LinkedIn page shell with no job body — while every score
+  // 2+ row carried 3557+. 2000 separates the two cleanly with room either way.
+  const THIN_TEXT_CHARS = 2000;
+
+  let scoreRescanQueue = [];
+  let scoreRescanRunning = false;
+
+  async function loadScoreRescanCount() {
+    try {
+      const r = await fetch('/api/apply/jobs/low-score?maxScore=1&limit=500');
+      if (!r.ok) return;
+      const d = await r.json();
+      const btn = document.getElementById('rescanScoreBtn');
+      const lab = document.getElementById('rescanScoreLabel');
+      if (!d.count) { btn.style.display = 'none'; return; }
+      btn.style.display = '';
+      const thin = d.jobs.filter(j => j.jobTextLen < THIN_TEXT_CHARS).length;
+      lab.textContent = `Rescan score-1 (${d.count}${thin ? ` · ${thin} thin` : ''})`;
+    } catch {}
+  }
+
+  async function startScoreRescan() {
+    if (scoreRescanRunning) return;
+    const lab = document.getElementById('rescanScoreLabel');
+    const r = await fetch('/api/apply/jobs/low-score?maxScore=1&limit=500');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.count) { await loadScoreRescanCount(); return; }
+
+    const thin = d.jobs.filter(j => j.jobTextLen < THIN_TEXT_CHARS);
+    const pick = thin.length ? thin : d.jobs;
+    if (!confirm(
+      `Re-scan ${pick.length} job(s) scored 1?\n\n` +
+      (thin.length
+        ? `These ${thin.length} captured under ${THIN_TEXT_CHARS} chars — the page shell without the job body, i.e. the scrape ran before the description rendered.\n`
+        : `All of these carry a full job description, so the low score looks genuine rather than a failed scrape.\n`) +
+      `\nTheir cached verdict will be cleared and each job page re-opened (1 every 2-4 s) for the extension to analyse.`
+    )) return;
+
+    lab.textContent = 'Clearing cached verdicts…';
+    try {
+      await fetch('/api/apply/jobs/clear-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobLinks: pick.map(j => j.jobLink) }),
+      });
+    } catch { lab.textContent = 'Could not clear verdicts'; return; }
+
+    scoreRescanQueue = pick.map(j => ({ url: j.jobLink, label: j.company || j.title || j.jobLink }));
+    scoreRescanTotal = scoreRescanQueue.length;
+    scoreRescanRunning = true;
+    runScoreRescanLoop();
+  }
+
+  let scoreRescanTotal = 0;
+
+  // Paced the same way as the LI rescan: one tab at a time with a visible
+  // countdown, so a queue of 50 doesn't look like a popup flood.
+  async function runScoreRescanLoop() {
+    const lab = document.getElementById('rescanScoreLabel');
+    if (!scoreRescanRunning) { lab.textContent = 'Rescan stopped'; return; }
+    const next = scoreRescanQueue.shift();
+    if (!next) {
+      scoreRescanRunning = false;
+      lab.textContent = `Re-scanned ${scoreRescanTotal} — refreshing…`;
+      setTimeout(async () => { await reload(); await loadScoreRescanCount(); }, 8000);
+      setTimeout(async () => { await reload(); await loadScoreRescanCount(); }, 25000);
+      return;
+    }
+    const done = scoreRescanTotal - scoreRescanQueue.length;
+    lab.textContent = `Rescanning ${done}/${scoreRescanTotal}: ${String(next.label).slice(0, 24)}`;
+    window.open(next.url, '_blank', 'noopener');
+    let wait = 2 + Math.floor(Math.random() * 3);
+    const tick = setInterval(() => {
+      if (!scoreRescanRunning) { clearInterval(tick); return; }
+      lab.textContent = `${done}/${scoreRescanTotal} · next in ${wait}s…`;
+      if (--wait <= 0) { clearInterval(tick); runScoreRescanLoop(); }
+    }, 1000);
+  }
+
+  // Rescan-missing-LI-count button — server returns the list of LinkedIn
+  // rows missing employeesOnLinkedIn (scraper ran too early, or row was
+  // imported as a stub and never analyzed). Click opens those URLs one at
+  // a time, 2-3 s gap, so the extension can re-scrape at a human-ish pace.
+  // Re-run mechanic: startRescan() POSTs /api/apply/jobs/clear-scan first,
+  // which $unsets verdict + companyDetails on the row. The extension's
+  // content.js then hits /api/ext/result/:jobId, which returns 404 when
+  // verdict is missing (see services/ext-api/router.js) — that 404 is what
+  // makes content.js fall into its full-scan path instead of treating the
+  // stub as a cache hit.
+  // ──────────────────────────────────────────────────────────────────────
+  let rescanQueue = [];   // remaining jobLink objects this run
+  let rescanRunning = false;
+
+  // The server scopes this to the signed-in user's pending rows.
+  const missingLiUrl = '/api/apply/jobs/missing-li-count?limit=500';
+
+  async function loadRescanCount() {
+    try {
+      const r = await fetch(missingLiUrl);
+      if (!r.ok) return;
+      const data = await r.json();
+      const btn = document.getElementById('rescanLiBtn');
+      const lab = document.getElementById('rescanLiLabel');
+      // Count the COMPANIES this will open, not the rows. Rescan dedupes by
+      // company and skips rows with no captured URL, so a row count promised
+      // seven tabs where four would open.
+      const openable = buildRescanOpenList(data.jobLinks || []).opens.length;
+      if (!openable) {
+        btn.style.display = 'none';
+        return;
+      }
+      btn.style.display = '';
+      lab.textContent = `Rescan missing LI count (${openable})`;
+      btn.dataset.count = String(openable);
+    } catch {}
+  }
+
+  // Smoke-test: open the first caught company page from the missing set.
+
+  // Normalize any stored company URL to the /people/ tab (which renders the headcount band) + #fgcap so the extension may auto-close it. Null if no URL.
+  function canonCompanyUrl(u) {
+    const m = (u || '').match(/\/company\/([^/?#]+)/i);
+    return m ? `https://www.linkedin.com/company/${m[1].toLowerCase()}/people/#fgcap` : null;
+  }
+
+  // One deduped /people/ tab per company we have a caught URL for; rows without one are skipped (the job page won't surface a URL it never had).
+  function buildRescanOpenList(rows) {
+    const seenCompany = new Set();
+    const opens = [];
+    let skipped = 0;
+    for (const row of rows) {
+      const cu = canonCompanyUrl(row.companyLinkedIn);
+      if (!cu) { skipped++; continue; }
+      if (seenCompany.has(cu)) continue;
+      seenCompany.add(cu);
+      opens.push({ url: cu, kind: 'company', label: row.company || cu });
+    }
+    return { opens, skipped };
+  }
+
+  async function startRescan() {
+    if (rescanRunning) return;
+    const r = await fetch(missingLiUrl);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data.count) { await loadRescanCount(); return; }
+
+    // Backfill from peers first — copy a count we already hold for the same company instead of opening a tab.
+    const lab = document.getElementById('rescanLiLabel');
+    lab.textContent = 'Backfilling from existing scans…';
+    // Backfill returns slim stubs; re-join to keep each row's companyLinkedIn.
+    const byLink = new Map(data.jobLinks.map(j => [j.jobLink, j]));
+    let queue = data.jobLinks;
+    try {
+      const bf = await fetch('/api/apply/jobs/backfill-li-count', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobLinks: data.jobLinks.map(j => j.jobLink) }),
+      });
+      if (bf.ok) {
+        const bd = await bf.json();
+        if (Array.isArray(bd.remainingJobLinks)) {
+          queue = bd.remainingJobLinks.map(q => byLink.get(q.jobLink) || q);
+        }
+        if (bd.filled) lab.textContent = `Backfilled ${bd.filled} · ${queue.length} need a live rescan`;
+      }
+    } catch { /* fall through to rescanning the full set */ }
+
+    // Everything satisfied from our own data — no tabs to open.
+    if (!queue.length) {
+      const btn = document.getElementById('rescanLiBtn');
+      btn.dataset.toast = 'ok';
+      lab.textContent = `Backfilled all ${data.count} from existing data`;
+      setTimeout(async () => { await reload(); await loadRescanCount(); delete btn.dataset.toast; }, 6000);
+      return;
+    }
+
+    const { opens, skipped } = buildRescanOpenList(queue);
+    if (!opens.length) {
+      lab.textContent = 'Rescan missing LI count — none have a company URL';
+      return;
+    }
+    if (!confirm(
+      `Open ${opens.length} company page(s) (1 every 1-3 s)?\n\n` +
+      `Headcount-only, no job-page hit.${skipped ? ` ${skipped} row(s) skipped — no company URL.` : ''}`
+    )) { lab.textContent = `Rescan missing LI count (${opens.length})`; return; }
+
+    rescanQueue = opens.slice();
+    rescanTotal = rescanQueue.length;
+    rescanRunning = true;
+    runRescanLoop();
+  }
+
+  // Mirrors the old job-scanner dashboard's rescan UX exactly: opens each
+  // URL, then runs a 1-3 second countdown ("next in Xs…") in the button
+  // label so the user can see we're paced. After the queue drains we
+  // refresh the apply page list twice (8 s + 25 s) — re-scanned rows
+  // need a moment to land on the server before they show as populated.
+  let rescanTotal = 0;
+
+  async function runRescanLoop() {
+    const btn = document.getElementById('rescanLiBtn');
+    const lab = document.getElementById('rescanLiLabel');
+    if (!rescanRunning) { lab.textContent = 'Rescan stopped'; return; }
+    const next = rescanQueue.shift();
+    if (!next) {
+      rescanRunning = false;
+      lab.textContent = `Done — ${rescanTotal} reopened`;
+      btn.dataset.toast = 'ok';
+      setTimeout(async () => { await reload(); await loadRescanCount(); }, 8000);
+      setTimeout(async () => { await reload(); await loadRescanCount(); delete btn.dataset.toast; }, 25000);
+      return;
+    }
+    // Just open the tab. `noopener` makes window.open return null on a
+    // successful open too (browser spec), so any null-check based "popup
+    // blocked" detection would false-positive on every iteration.
+    window.open(next.url, '_blank', 'noopener');
+    const doneSoFar = rescanTotal - rescanQueue.length;
+    btn.dataset.toast = '';
+    btn.title = '';
+
+    // Countdown — 1 to 3 s random, updated every second in the label.
+    const delaySec = 1 + Math.floor(Math.random() * 3);
+    for (let remain = delaySec; remain > 0; remain--) {
+      if (!rescanRunning) return;
+      lab.textContent = `Rescanning ${doneSoFar}/${rescanTotal} · next in ${remain}s…`;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    runRescanLoop();
+  }
+
+  function stopRescan() {
+    rescanRunning = false;
+    rescanQueue = [];
+  }
+
+  // listeners
+  document.getElementById('parseClipboardBtn').addEventListener('click', parseClipboard);
+  document.getElementById('copyLinksBtn').addEventListener('click', copyLinks);
+  document.getElementById('rescanLiBtn').addEventListener('click', () => {
+    if (rescanRunning) stopRescan();
+    else startRescan();
+  });
+  document.getElementById('applySearch').addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(async () => { await reload(); }, 250);
+  });
+  document.getElementById('applySortSelect').addEventListener('change', async (e) => {
+    sortKey = e.target.value;
+    await reload();
+  });
+
+  // Auto-expand-next-on-reject checkbox: state survives reloads.
+  const _autoExpKey = 'apply.autoExpandFirstOnReject';
+  document.getElementById('sortResumesBtn')?.addEventListener('click', reorderOutbox);
+  document.getElementById('rescanScoreBtn')?.addEventListener('click', startScoreRescan);
+  document.getElementById('tailorResumesBtn')?.addEventListener('click', startTailorRun);
+  document.getElementById('reanalyzeImportedBtn')?.addEventListener('click', startReanalyzeImported);
+
+  // ATS pill → resume viewer, and the viewer's own close affordances.
+  // Delegated so it survives every renderRows() rewrite of the tbody.
+  document.addEventListener('click', (e) => {
+    const pill = e.target.closest('.ats-pill[data-variant]');
+    if (pill) { e.stopPropagation(); showResumeViewer(pill.dataset.variant); return; }
+    if (e.target.closest('[data-close-resume]')) {
+      document.getElementById('resumeOverlay').style.display = 'none';
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const o = document.getElementById('resumeOverlay');
+    if (o && o.style.display !== 'none') o.style.display = 'none';
+  });
+
+  const _autoExpChk = document.getElementById('autoExpandFirstChk');
+  if (_autoExpChk) {
+    try { _autoExpChk.checked = localStorage.getItem(_autoExpKey) === '1'; } catch {}
+    _autoExpChk.addEventListener('change', () => {
+      try { localStorage.setItem(_autoExpKey, _autoExpChk.checked ? '1' : '0'); } catch {}
+    });
+  }
+
+  // boot
+  (async () => {
+    try {
+      await loadUsers();
+      await Promise.all([loadJobs(), loadStats(), loadRescanCount(), loadScoreRescanCount(), loadTailorResults()]);
+      renderAll();
+      loadTailorQueue();
+    } catch (e) {
+      document.getElementById('resultsMeta').textContent = 'Failed to load: ' + e.message;
+    }
+  })();
+
+  // Manual refresh button. Delegated off document so it works regardless
+  // of whether the <button> element is parsed before or after this IIFE
+  // runs (it currently sits after the closing script tag in the file).
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('#refreshBtn');
+    if (!btn) return;
+    btn.classList.add('spinning');
+    try { await reload(); }
+    finally { btn.classList.remove('spinning'); }
+  });
+})();
+</script>
+
+<!-- Tailored-resume viewer. Opened by clicking a row's ATS pill; filled by
+     showResumeViewer() in the inline script above. -->
+<div id="resumeOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:24px"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div class="resume-modal__panel" id="resumePanel"></div>
+</div>
+
+<button class="refresh-btn" id="refreshBtn" title="Refresh data from mongo">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <path d="M17 10a7 7 0 01-12.9 3.7M3 10a7 7 0 0112.9-3.7M17 10V4m0 6h-6M3 10v6m0-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+</body>
+</html>

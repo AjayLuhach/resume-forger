@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>About | Resume Forge</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #12121a;
+    --bg3: #1a1a2e;
+    --surface: rgba(255,255,255,0.03);
+    --border: rgba(255,255,255,0.06);
+    --text: #e4e4e7;
+    --text2: #a1a1aa;
+    --text3: #71717a;
+    --accent: #818cf8;
+    --accent2: #6366f1;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --rose: #fb7185;
+    --cyan: #22d3ee;
+    --purple: #a78bfa;
+    --glow: rgba(99,102,241,0.15);
+    --glow2: rgba(99,102,241,0.08);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(99,102,241,0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 60% 50% at 80% 90%, rgba(168,85,247,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(34,211,238,0.04) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none; z-index: 0;
+  }
+
+  .container {
+    max-width: 900px; margin: 0 auto;
+    padding: 2.5rem 1.5rem;
+    position: relative; z-index: 1;
+  }
+
+  .page-header {
+    text-align: center; margin-bottom: 3rem;
+  }
+
+  .page-header h1 {
+    font-size: 2.2rem; font-weight: 800; letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 50%, var(--cyan) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 0.6rem;
+  }
+
+  .page-header p {
+    color: var(--text3); font-size: 0.95rem; max-width: 620px; margin: 0 auto; line-height: 1.6;
+  }
+
+  .section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .section:hover { border-color: rgba(255,255,255,0.1); }
+  .section.open { border-color: rgba(99,102,241,0.2); }
+
+  .section-header {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 1.2rem 1.5rem; cursor: pointer;
+    transition: background 0.2s; user-select: none;
+  }
+  .section-header:hover { background: var(--surface); }
+
+  .section-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; font-weight: 700; flex-shrink: 0;
+  }
+
+  .section-meta { flex: 1; }
+  .section-title {
+    font-size: 0.95rem; font-weight: 600; color: var(--text);
+    margin-bottom: 0.15rem;
+  }
+  .section-subtitle {
+    font-size: 0.75rem; color: var(--text3);
+  }
+
+  .section-arrow {
+    width: 20px; height: 20px; color: var(--text3);
+    transition: transform 0.3s; flex-shrink: 0;
+  }
+  .section.open .section-arrow { transform: rotate(180deg); }
+
+  .section-body {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.4s ease;
+  }
+  .section.open .section-body {
+    max-height: 3000px;
+  }
+
+  .section-content {
+    padding: 0 1.5rem 1.5rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1.2rem;
+  }
+
+  .section-content p {
+    font-size: 0.85rem; color: var(--text2); line-height: 1.7;
+    margin-bottom: 0.8rem;
+  }
+
+  .section-content h4 {
+    font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text3); margin: 1.2rem 0 0.5rem;
+  }
+  .section-content h4:first-child { margin-top: 0; }
+
+  .section-content ul {
+    list-style: none; padding: 0;
+  }
+  .section-content li {
+    font-size: 0.83rem; color: var(--text2); line-height: 1.6;
+    padding: 0.3rem 0 0.3rem 1.2rem; position: relative;
+  }
+  .section-content li::before {
+    content: ''; position: absolute; left: 0; top: 0.65rem;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent); opacity: 0.6;
+  }
+
+  .section-content code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem; background: var(--bg);
+    padding: 0.15rem 0.4rem; border-radius: 4px;
+    color: var(--cyan);
+  }
+
+  .section-content a { color: var(--accent); text-decoration: none; }
+  .section-content a:hover { text-decoration: underline; }
+
+  .step-flow {
+    display: flex; flex-direction: column; gap: 0;
+  }
+
+  .flow-step {
+    display: flex; gap: 1rem; align-items: flex-start;
+    position: relative; padding-bottom: 1.2rem;
+  }
+  .flow-step:last-child { padding-bottom: 0; }
+  .flow-step:not(:last-child)::after {
+    content: ''; position: absolute; left: 15px; top: 32px;
+    width: 1px; bottom: 0;
+    background: linear-gradient(to bottom, var(--accent), transparent);
+    opacity: 0.3;
+  }
+
+  .flow-num {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--glow2); border: 1px solid rgba(99,102,241,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700; color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .flow-info { flex: 1; }
+  .flow-title {
+    font-size: 0.85rem; font-weight: 600; color: var(--text);
+    margin-bottom: 0.2rem;
+  }
+  .flow-desc {
+    font-size: 0.8rem; color: var(--text3); line-height: 1.6;
+  }
+
+  .code-block {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.2rem; overflow-x: auto; position: relative;
+    margin: 0.5rem 0;
+  }
+  .code-block pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.76rem; color: var(--text2); line-height: 1.7;
+    margin: 0;
+  }
+  .code-block .copy-btn {
+    position: absolute; top: 0.6rem; right: 0.6rem;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text3); font-size: 0.65rem; padding: 0.25rem 0.6rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .code-block .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  .tag {
+    display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 500;
+  }
+  .tag-required { background: rgba(251,113,133,0.12); color: var(--rose); }
+  .tag-optional { background: rgba(251,191,36,0.12); color: var(--amber); }
+
+  .tab-cards {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.8rem; margin-top: 0.5rem;
+  }
+
+  .tab-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1rem; transition: border-color 0.2s;
+  }
+  .tab-card:hover { border-color: rgba(99,102,241,0.2); }
+  .tab-card-title {
+    font-size: 0.82rem; font-weight: 600; color: var(--text);
+    margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.4rem;
+  }
+  .tab-card-desc {
+    font-size: 0.78rem; color: var(--text3); line-height: 1.5;
+  }
+
+  .group-label {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--accent); margin: 1.2rem 0 0.5rem;
+  }
+  .group-label:first-child { margin-top: 0; }
+
+  .callout {
+    background: rgba(99,102,241,0.06);
+    border: 1px solid rgba(99,102,241,0.18);
+    border-radius: 10px; padding: 0.9rem 1.1rem;
+    font-size: 0.82rem; color: var(--text2); line-height: 1.65;
+    margin: 0.8rem 0;
+  }
+  .callout strong { color: var(--text); font-weight: 600; }
+
+  .footer-note {
+    text-align: center; margin-top: 3rem; padding: 1.5rem;
+    font-size: 0.78rem; color: var(--text3); line-height: 1.6;
+  }
+  .footer-note a { color: var(--accent); text-decoration: none; }
+  .footer-note a:hover { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="/app.css">
+<script src="/nav.js" defer></script>
+</head>
+<body>
+
+<div class="container">
+  <div class="page-header">
+    <h1>How It Works</h1>
+    <p>Resume Forge is a self-hosted, single-user job-application toolkit &mdash; one server, one MongoDB, three flows: tailor a resume to a JD, run an outreach pipeline against scraped LinkedIn posts, and track direct applications. Your resume, settings and every row you triage live in your own database. Optionally, peers' databases feed you the jobs they have already scraped and analyzed.</p>
+  </div>
+
+  <!-- Section 1: Getting Started -->
+  <div class="section open" id="s-setup">
+    <div class="section-header" onclick="toggleSection('s-setup')">
+      <div class="section-icon" style="background:rgba(52,211,153,0.12);color:var(--green);">1</div>
+      <div class="section-meta">
+        <div class="section-title">Getting Started</div>
+        <div class="section-subtitle">Clone, configure, create your user, and log in</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+        <div class="step-flow">
+          <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div class="flow-info">
+              <div class="flow-title">Clone &amp; install</div>
+              <div class="flow-desc">Run <code>npm install</code>. PDF conversion uses LibreOffice &mdash; <code>npm run install-pdf</code> apt-installs it on Linux; otherwise the pipeline falls back to Puppeteer/Chrome.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div class="flow-info">
+              <div class="flow-title">Configure <code>.env</code></div>
+              <div class="flow-desc">Copy <code>.env.example</code> &rarr; <code>.env</code>. Fill in AI provider creds (Bedrock or Gemini), <code>MONGO_URI</code>, <code>MONGO_DB</code>, and <code>SESSION_SECRET</code> (generate via <code>openssl rand -hex 32</code>). User identity is <strong>not</strong> an env concern &mdash; only infrastructure goes here.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-info">
+              <div class="flow-title">Start the server</div>
+              <div class="flow-desc"><code>npm run web</code> &rarr; <code>http://localhost:&lt;PORT&gt;</code> (the <code>PORT</code> in <code>.env</code>; 5003 by default &mdash; if you change it, set the same number under <em>Server port</em> in the extension popup). With an empty <code>users</code> collection every page redirects to <a href="/setup">/setup</a> until a user exists.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div class="flow-info">
+              <div class="flow-title">Create your user (first run)</div>
+              <div class="flow-desc"><a href="/setup">/setup</a> is a one-time form &mdash; name, email, password &mdash; that creates the user and logs you in. The terminal equivalent is <code>node scripts/create-user.js --username "Jane Doe" --email jane@example.com</code> (without <code>--password</code> a random password is generated and printed once &mdash; copy it, then change it under <a href="/settings">Settings</a>). Either path writes the auth doc to <code>users</code> and creates the user's compound index on <code>job_tracker</code> so the apply tracker is fast from day one. The database holds exactly one user &mdash; a second is refused.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">5</div>
+            <div class="flow-info">
+              <div class="flow-title">Add your resume</div>
+              <div class="flow-desc">Open <a href="/resume.html">Resume</a> and paste your tailor JSON (the deep version) and feed JSON (the slim version used for outreach scoring). Upload your master PDF. Everything lives in mongo at <code>users.&lt;you&gt;.{data,feedData,pdf}</code>.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: How Identity Works -->
+  <div class="section" id="s-identity">
+    <div class="section-header" onclick="toggleSection('s-identity')">
+      <div class="section-icon" style="background:rgba(34,211,238,0.12);color:var(--cyan);">2</div>
+      <div class="section-meta">
+        <div class="section-title">How Identity Works</div>
+        <div class="section-subtitle">MongoDB is the single source of truth &mdash; no env, no file fallback</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+        <p>The <code>users</code> collection holds exactly one document &mdash; you &mdash; keyed by <code>username</code>. Every flow resolves that user from the session, or falls back to the sole user when there is no session (CLIs, the extension's bearer-token path) &mdash; never from environment variables, never from a local file, never from a query parameter.</p>
+
+        <h4>What's on each user doc</h4>
+        <ul>
+          <li><code>username</code> &mdash; canonical name (e.g. <code>"Jane Doe"</code>). Doc key.</li>
+          <li><code>auth.email</code> + <code>auth.passwordHash</code> &mdash; login credentials.</li>
+          <li><code>data</code> &mdash; tailor-side resume JSON (deep). 5-deep history ring on every save.</li>
+          <li><code>feedData</code> &mdash; feed-side resume JSON (slim), including <code>preferences</code> (country, currency, salary floor, reject rules). Used by the outreach scorer/drafter.</li>
+          <li><code>pdf</code> &mdash; master resume PDF as BSON Binary.</li>
+          <li><code>emailConfig.smtp</code> &mdash; your SMTP creds, set under Settings. Needed before <strong>Generate emails</strong> / <strong>Send approved</strong> will run.</li>
+        </ul>
+
+        <h4>Who's the active user?</h4>
+        <ul>
+          <li><strong>Web requests</strong> &mdash; the signed session cookie, else the sole user in the database. There is no per-request user override.</li>
+          <li><strong>CLIs</strong> (<code>scripts/feed/feed-cli.js</code>, <code>scripts/feed/send-emails.js</code>) &mdash; <code>--user "Name"</code> is optional; without it the sole user is used. With zero or more than one user the CLI stops with an error rather than guessing.</li>
+        </ul>
+
+        <div class="callout">
+          <strong>Removed patterns (do not reintroduce):</strong> identity from env vars (<code>RESUME_USER</code> et al.), identity from a local <code>resumeData.json</code>, nickname maps, module-init globals that pre-bind to one user, per-request query / body user overrides, and a join-date visibility cutoff. See <code>CLAUDE.md</code> for the full anti-pattern list.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: The Three Flows -->
+  <div class="section" id="s-flows">
+    <div class="section-header" onclick="toggleSection('s-flows')">
+      <div class="section-icon" style="background:rgba(99,102,241,0.12);color:var(--accent);">3</div>
+      <div class="section-meta">
+        <div class="section-title">The Three Flows</div>
+        <div class="section-subtitle">Tailor, Outreach, Direct apply &mdash; what each does end-to-end</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+
+        <div class="group-label">Tailor &mdash; paste a JD, get an ATS-tuned PDF</div>
+        <div class="step-flow">
+          <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div class="flow-info">
+              <div class="flow-title">Pre-flight checks</div>
+              <div class="flow-desc">Verifies AI provider creds, that <code>template.docx</code> exists, and tests LibreOffice availability.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div class="flow-info">
+              <div class="flow-title">Validate JD &amp; load resume</div>
+              <div class="flow-desc">JD needs &ge; 100 chars. Resume data is loaded from <code>users.&lt;you&gt;.data</code> in mongo &mdash; validated against the schema before the AI sees it.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-info">
+              <div class="flow-title">AI rewrite + emails + DM</div>
+              <div class="flow-desc">The provider extracts JD keywords, matches them against your skills, and rewrites your title, summary, bullets, skills, and project descriptions to maximize keyword alignment. It also drafts an application email and a LinkedIn DM.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div class="flow-info">
+              <div class="flow-title">ATS scoring</div>
+              <div class="flow-desc">Deterministic scorer: keyword match %, title match, experience gap penalties, and hard-reject gates (e.g. JD demands Java but your stack is JavaScript). 70+ is good; 50&ndash;69 mid; &lt;50 needs attention.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">5</div>
+            <div class="flow-info">
+              <div class="flow-title">DOCX &rarr; PDF</div>
+              <div class="flow-desc">Typesets the resume as HTML in Chrome and measures it so it fits one page (scaling first, trimming old roles only as a last resort); <code>template.docx</code> + LibreOffice is the fallback and the DOCX download. Saves <code>&lt;Name&gt;_&lt;Role&gt;.pdf</code> to <code>OUTPUT_DIR</code> (default <code>~/Downloads/resume-forge</code>) and a row in <code>resume_variants</code>.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group-label">Outreach &mdash; LinkedIn posts &rarr; personalized emails</div>
+        <div class="step-flow">
+          <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div class="flow-info">
+              <div class="flow-title">Parse</div>
+              <div class="flow-desc">Paste LinkedIn post HTML/text (or use the parser) &rarr; <code>output/extract.json</code>. Click <strong>Add posts</strong> on the Posts tab to do this from the UI.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div class="flow-info">
+              <div class="flow-title">Generate</div>
+              <div class="flow-desc">AI extracts who's hiring, what role, what skills, what salary &rarr; <code>posts</code> collection (the post pool, deduplicated by <code>postId</code>).</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-info">
+              <div class="flow-title">Score &amp; draft emails</div>
+              <div class="flow-desc">Score every post against your <code>feedData</code> (experience, salary, skills with aliases, <code>cannotClaim</code> list, <code>preferences</code>). Posts that pass thresholds become drafted emails in <code>user_emails</code>. Click <strong>Generate emails</strong> on the Feed tab &mdash; it first checks that a feed resume and SMTP settings exist and points you to the right page if either is missing.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div class="flow-info">
+              <div class="flow-title">Review &amp; approve</div>
+              <div class="flow-desc">Drafted emails show on <a href="/feed">Feed</a>. Approve / reject / fix from the UI. Approving doesn't send &mdash; that's still a manual click.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">5</div>
+            <div class="flow-info">
+              <div class="flow-title">Send via your SMTP</div>
+              <div class="flow-desc"><strong>Send approved</strong> sends every approved-unsent email using the <code>emailConfig.smtp</code> on your user doc, set under Settings.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group-label">Direct apply &mdash; job tracker</div>
+        <p>The <a href="/apply">Apply</a> board lists every job the extension has analyzed, plus any pulled in from peers. Each carries your status (Pending / Applied / Interviewing / Success / Rejected). Paste a job URL or post to add. The user's compound index (<code>apply_&lt;Name&gt;_1</code>) on <code>job_tracker</code> keeps reads ~80 ms warm.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 4: Dashboard Tabs -->
+  <div class="section" id="s-tabs">
+    <div class="section-header" onclick="toggleSection('s-tabs')">
+      <div class="section-icon" style="background:rgba(167,139,250,0.12);color:var(--purple);">4</div>
+      <div class="section-meta">
+        <div class="section-title">Dashboard Tabs</div>
+        <div class="section-subtitle">What each page does</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+
+        <div class="group-label">Tailor</div>
+        <div class="tab-cards">
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--accent)">&#9889;</span> Generate</div>
+            <div class="tab-card-desc">Paste a JD, pick provider/model, stream the pipeline (validate &rarr; load resume &rarr; AI rewrite &rarr; email/DM &rarr; one-page PDF). Output to <code>OUTPUT_DIR</code> (default <code>~/Downloads/resume-forge</code>); every run is also listed under History.</div>
+          </div>
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--cyan)">&#128221;</span> Resume</div>
+            <div class="tab-card-desc">Edit your tailor + feed JSONs side-by-side, upload the master PDF, restore from the 5-deep history ring.</div>
+          </div>
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--cyan)">&#128203;</span> History</div>
+            <div class="tab-card-desc">Every tailored resume ever, click to re-download. Regenerates the PDF if the file went missing.</div>
+          </div>
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--purple)">&#128101;</span> Contacts</div>
+            <div class="tab-card-desc">People you've contacted via the tailor flow &mdash; recruiter names, LinkedIn profiles, application URLs.</div>
+          </div>
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--rose)">&#128200;</span> Skill Gaps</div>
+            <div class="tab-card-desc">Aggregated view of skills JDs keep asking for that you don't have. Helps prioritize learning.</div>
+          </div>
+        </div>
+
+        <div class="group-label">Outreach</div>
+        <div class="tab-cards">
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--accent)">&#128193;</span> Posts</div>
+            <div class="tab-card-desc">The pool of captured LinkedIn hiring posts (the extension's Feed capture fills it). Filter, mark Skipped, view details. <strong>Connect</strong> opens a poster's profile and queues the request; <strong>Auto-connect</strong> hands the visible profiles to the extension, which opens each in the background, clicks Connect (top card or the More menu) and "Send without a note", then closes the tab.</div>
+          </div>
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--green)">&#9993;</span> Feed (Emails)</div>
+            <div class="tab-card-desc">Your email drafts with status chips (Drafted / Approved / Sent / Rejected). <strong>Generate emails</strong> scores + drafts; <strong>Send approved</strong> bulk-sends via your SMTP.</div>
+          </div>
+        </div>
+
+        <div class="group-label">Direct</div>
+        <div class="tab-cards">
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--amber)">&#9986;</span> Apply</div>
+            <div class="tab-card-desc">Job board with your status per row; rows pulled from peers carry an <strong>imported</strong> pill until you re-analyze them. Add by pasting a job URL or post text. Toolbar checkbox <strong>Auto-expand next on reject</strong> opens the next pending job's analysis panel in the same paint when you reject the top row.</div>
+          </div>
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--green)">&#9745;</span> Scanner</div>
+            <div class="tab-card-desc">Capture LinkedIn job searches through the extension: save search URLs, hit <strong>Open &amp; capture</strong> (or click <strong>Start capturing</strong> and browse a search yourself), then <strong>Load captured</strong> &mdash; the server extracts the job IDs, tags each NEW / SCANNED / IMPORTED / BLOCKED, and <strong>Open batch</strong> opens the new ones in tabs so the extension analyzes each. Same page manages <strong>Blocked Companies</strong>, <strong>Auto-Reject Rules</strong> (experience / employee bounds), and <strong>Blocked Keywords</strong> against AI-extracted title + summary.</div>
+          </div>
+          <div class="tab-card">
+            <div class="tab-card-title"><span style="color:var(--cyan)">&#127757;</span> Connections</div>
+            <div class="tab-card-desc">LinkedIn connections scraped by the Job Scanner extension, grouped into cards <strong>by matching job</strong> (one card per tracked job, connections nested inside). Two filters: <strong>Recently connected</strong> (default) and <strong>Recently applied &middot; has connects</strong>. Per-row Profile + Msg buttons.</div>
+          </div>
+        </div>
+
+        <div class="callout"><code>/posts</code> and <code>/feed</code> are the <strong>same HTML</strong> (<code>public/feed.html</code>) &mdash; the page reads <code>window.location.pathname</code> to decide what to render. Both are auth-gated by the main server.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 5: Peer Job Sources -->
+  <div class="section" id="s-peers">
+    <div class="section-header" onclick="toggleSection('s-peers')">
+      <div class="section-icon" style="background:rgba(34,211,238,0.12);color:var(--cyan);">5</div>
+      <div class="section-meta">
+        <div class="section-title">Peer Job Sources</div>
+        <div class="section-subtitle">Pull jobs friends have already scraped and analyzed &mdash; triage without re-scraping</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+        <p>Everyone runs their own copy of Resume Forge against their own database. If a friend agrees to share, paste their MongoDB connection string under <a href="/settings">Settings &rarr; Peer job sources</a>. Peers live in <code>data/peers.json</code> on your machine &mdash; a local, gitignored file, never your database &mdash; so a connection string someone trusts you with is only ever readable by you.</p>
+        <ul>
+          <li><strong>Every 30 s</strong> the server reads each peer's <code>job_tracker</code> and upserts the rows you don't have as <em>pending</em> rows in your own database, analysis attached. <strong>Test</strong> and <strong>Sync now</strong> on the Settings page run a single peer on demand.</li>
+          <li>Imported rows carry <code>importedFrom</code> (<code>{ peerId, label, at, peerJobLink, peerAnalyzedAt, peerRowStatus }</code>) and show an <strong>imported</strong> pill on <a href="/apply">Apply</a> and an <strong>IMPORTED</strong> tag on the <a href="/scanner">Scanner</a>. Their verdict and score are the peer's &mdash; scored against the peer's resume, not yours.</li>
+          <li><strong>Re-analyze</strong> runs the scanner's analysis over an imported row with your own resume and replaces the peer's verdict; opening the job with the extension running does the same automatically. Once re-analyzed the row is yours and the pill disappears.</li>
+          <li>Reject / apply from the Apply board as usual &mdash; your status never flows back to the peer. Removing a peer with <em>purge</em> also drops the rows it imported.</li>
+        </ul>
+        <div class="callout"><strong>Read-only by design.</strong> The sync only ever reads from a peer's database and only ever writes to yours. When you share your own connection string, hand out a read-only database user.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 6: Resume Data Shape -->
+  <div class="section" id="s-schema">
+    <div class="section-header" onclick="toggleSection('s-schema')">
+      <div class="section-icon" style="background:rgba(167,139,250,0.12);color:var(--purple);">6</div>
+      <div class="section-meta">
+        <div class="section-title">Resume Data Shape</div>
+        <div class="section-subtitle">What lives in <code>users.&lt;you&gt;.data</code> and <code>users.&lt;you&gt;.feedData</code></div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+        <p>Your resume lives in mongo, edited via the <a href="/resume.html">Resume</a> tab. Two shapes coexist:</p>
+
+        <h4>Tailor-side (<code>data</code>) &mdash; deep, used by the Generate pipeline</h4>
+        <ul>
+          <li><code>personalInfo</code> <span class="tag tag-required">required</span> &mdash; <code>name</code>, <code>email</code> required; phone/location/links optional.</li>
+          <li><code>meta</code> <span class="tag tag-required">required</span> &mdash; <code>experienceStart</code> (e.g. <code>"Aug 2023"</code>), <code>stack</code>, optional <code>cannotClaim</code>, <code>coreProjects</code>, <code>primaryCloud</code>.</li>
+          <li><code>professionalSummary.default</code> <span class="tag tag-required">required</span> &mdash; 200+ char summary, rewritten per JD.</li>
+          <li><code>skills</code> <span class="tag tag-required">required</span> &mdash; categorized buckets (<code>frontend</code> / <code>backend</code> / <code>toolsDevOps</code> / <code>databases</code> / <code>other</code>), each an array of skill strings. The labels are web-flavoured but any discipline maps onto them; <code>other</code> is the catch-all.</li>
+          <li><code>experience</code> <span class="tag tag-required">required</span> &mdash; array of jobs; each needs <code>company</code>, <code>title</code>, <code>duration</code>. May nest <code>projects[]</code> and <code>bullets[]</code>.</li>
+          <li><code>projects</code> <span class="tag tag-required">required</span> &mdash; personal projects. Detailed descriptions = better AI rewrites.</li>
+          <li><code>education</code> <span class="tag tag-optional">optional</span> &mdash; array; needs <code>degree</code> + <code>institution</code>.</li>
+        </ul>
+
+        <h4>Feed-side (<code>feedData</code>) &mdash; slim, used by the outreach scorer</h4>
+        <ul>
+          <li><code>personalInfo</code> &mdash; including <code>currentCTC</code> + <code>expectedCTC</code> for the email sign-off block.</li>
+          <li><code>experienceStart</code>, <code>stack</code>, <code>summary</code>.</li>
+          <li><code>skills</code> &mdash; same map shape; alias-aware matching against post requirements.</li>
+          <li><code>cannotClaim</code> &mdash; skills the email drafter must never claim on your behalf: the technologies adjacent to your stack that recruiters ask for but you have not used.</li>
+          <li><code>projects</code> &mdash; thin list of personal projects.</li>
+          <li><code>preferences</code> &mdash; country, currency and salary unit, USD rate, salary floor, allowed experience gap, walk-in / contract / intern / staffing rejects, excluded companies, notice period. Defaults are India / INR / LPA; the feed example on the Resume page lists every key with its default.</li>
+        </ul>
+
+        <h4>Loading in code</h4>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre>// Tailor side
+import config from './config.js';
+const candidate = await config.loadCandidate(username);
+
+// Feed side
+import { loadCandidate } from './services/feed/feed-config.js';
+const candidate = await loadCandidate(username);
+// → feedData if set, else falls back to data</pre>
+        </div>
+
+        <div class="callout"><strong>Validation</strong> &mdash; on each request to <code>/api/validate-resume</code>, the server reads <code>users.&lt;you&gt;.data</code> from mongo and runs the schema check in <code>services/resume-validator.js</code>. The Generate page shows the result in a banner (green / amber / red).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 7: AI Providers -->
+  <div class="section" id="s-providers">
+    <div class="section-header" onclick="toggleSection('s-providers')">
+      <div class="section-icon" style="background:rgba(251,191,36,0.12);color:var(--amber);">7</div>
+      <div class="section-meta">
+        <div class="section-title">AI Providers</div>
+        <div class="section-subtitle">Bedrock + Gemini, plus how to add your own</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+        <h4>AWS Bedrock (default)</h4>
+        <ul>
+          <li><code>AI_PROVIDER=bedrock</code> in <code>.env</code></li>
+          <li>Needs <code>BEDROCK_API_KEY</code> (bearer key for the mantle endpoint) — no AWS/IAM credentials</li>
+          <li><code>BEDROCK_BASE_URL</code> picks the region; default is ap-south-1 (Mumbai)</li>
+          <li><code>BEDROCK_MODEL</code> takes an alias (<code>deepseek</code>, <code>mistral</code>, <code>glm</code>, <code>qwen</code>, <code>gemma</code>) or a full mantle model ID</li>
+          <li>The model catalogue depends on the region — ap-south-1 is open-weight only; us-east-1 also lists Anthropic and OpenAI models, subject to account entitlement</li>
+          <li>Feed pipeline (scoring + drafting) uses <code>BEDROCK_MODEL_ID</code> independently (e.g. Gemma 3 27B)</li>
+          <li>Scanner uses <code>SCANNER_MODEL_ID</code> (default <code>gemma</code>)</li>
+        </ul>
+
+        <h4>Google Gemini</h4>
+        <ul>
+          <li><code>AI_PROVIDER=gemini</code></li>
+          <li>Needs <code>GEMINI_API_KEY</code></li>
+          <li>Auto-rotates through the model pool on rate limits; free tier works for low volume</li>
+        </ul>
+
+        <h4>Custom provider</h4>
+        <ul>
+          <li>Drop a file in <code>services/providers/</code> extending <code>BaseProvider</code></li>
+          <li>Implement <code>tailorResume(jd, resumeData)</code></li>
+          <li>Register in <code>services/providers/registry.js</code></li>
+          <li>See <code>services/providers/README.md</code> for the full contract</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 8: CLI & Claude Code -->
+  <div class="section" id="s-cli">
+    <div class="section-header" onclick="toggleSection('s-cli')">
+      <div class="section-icon" style="background:rgba(251,113,133,0.12);color:var(--rose);">8</div>
+      <div class="section-meta">
+        <div class="section-title">CLI &amp; Claude Code</div>
+        <div class="section-subtitle">Terminal commands; the UI shells out to most of these internally</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+        <h4>npm scripts</h4>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre>npm run web              # main server on PORT from .env (5003 by default)
+npm run install-pdf      # apt-install libreoffice-writer
+npm run models           # list available Bedrock models
+npm run feed:send        # send approved emails (--user optional, see below)
+        </div>
+
+        <h4>Feed pipeline (terminal)</h4>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre>node scripts/feed/feed-cli.js parse [--file path]          # clipboard → output/extract.json
+node scripts/feed/feed-cli.js generate [--user "Name"]      # extract.json → posts collection
+node scripts/feed/feed-cli.js emails   [--user "Name"]      # score + draft → user_emails
+                          [--redraft]
+node scripts/feed/feed-cli.js send     [--user "Name"]      # list approved unsent
+
+# --user is optional on every CLI: with one user in the database it is
+# inferred; with zero or several the command stops with an error.</pre>
+        </div>
+
+        <h4>One-off scripts</h4>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre>node scripts/create-user.js --username "X" --email x@y.com [--password ...]
+node scripts/create-user.js --password "new-password"                 # reset the existing user's password
+                                                # terminal alternative to /setup; refuses a second user
+node scripts/ensure-indexes.js                  # every index, idempotent — safe on a fresh database
+node scripts/seed-local-from-remote.js --user "X" --apply --drop
+                                                # copy your slice into a local test database
+node scripts/dump-mirrors.js                    # rebuild the mirror snapshots in one pass
+node scripts/list-bedrock-models.js</pre>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 9: Mongo Collections -->
+  <div class="section" id="s-mongo">
+    <div class="section-header" onclick="toggleSection('s-mongo')">
+      <div class="section-icon" style="background:rgba(52,211,153,0.12);color:var(--green);">9</div>
+      <div class="section-meta">
+        <div class="section-title">Mongo Collections</div>
+        <div class="section-subtitle">Quick map of what's stored where</div>
+      </div>
+      <svg class="section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="section-content">
+        <ul>
+          <li><code>users</code> &mdash; exactly one doc: you. Keyed by <code>username</code>. Carries auth, <code>data</code>, <code>feedData</code> (with <code>preferences</code>), <code>pdf</code>, SMTP creds. Index: <code>username</code> (unique).</li>
+          <li><code>posts</code> &mdash; the LinkedIn-scrape pool. Indexes: <code>postId</code>, <code>status</code>, <code>job.salaryMinLPA</code>, <code>_companyKey</code>.</li>
+          <li><code>user_emails</code> &mdash; email drafts (statuses: <code>no_email</code>, <code>drafted</code>, <code>approved</code>, <code>rejected</code>, <code>sent</code>). Indexes: <code>(username, postId)</code>, <code>(username, status)</code>, more.</li>
+          <li><code>user_connects</code> &mdash; connection requests queued from DM-only posts (<code>invited</code> &rarr; <code>connected</code> &rarr; <code>messaged</code>); acceptance is detected when the profile shows up in a connections scrape.</li>
+          <li><code>connections</code> &mdash; your LinkedIn connections, scraped by the extension, matched to tracked jobs by company.</li>
+          <li><code>job_tracker</code> &mdash; apply-tracker rows: everything the extension analyzed plus rows pulled from peers (<code>importedFrom</code> set until you re-analyze them). Indexes: <code>jobLink</code> (unique), <code>createdAt</code>, plus the user's compound <code>apply_&lt;Name&gt;_1</code>, created by <code>/setup</code> / <code>create-user.js</code>.</li>
+          <li><code>resume_variants</code> &mdash; every tailored resume ever generated. Indexes: <code>(username, generatedAt)</code>, <code>(username, jobCompany, jobTitle)</code>.</li>
+        </ul>
+
+        <div class="callout"><strong>Indexes belong in <code>scripts/ensure-indexes.js</code></strong> (idempotent, safe to run on a fresh database), not in <code>services/db.js</code>. Boot-time <code>createIndex</code> was removed to avoid racing with a collection rename &mdash; don't add it back. The user's own <code>job_tracker</code> index is created when the account is created.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Built with Node.js, Express, MongoDB, and a multi-provider AI registry.<br>
+    See <code>README.md</code> for the short version and <code>CLAUDE.md</code> for the agent guardrails.
+  </div>
+</div>
+
+<script>
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+function copyCode(btn) {
+  const pre = btn.parentElement.querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent);
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = 'Copy', 1500);
+}
+</script>
+</body>
+</html>

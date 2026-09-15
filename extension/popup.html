@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 400px; padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e; color: #e0e0e0;
+    }
+    h1 { font-size: 18px; margin-bottom: 12px; color: #ff9500; text-align: center; }
+    .status { font-size: 13px; color: #888; text-align: center; margin-bottom: 12px; min-height: 20px; }
+    .status.error { color: #ff4444; }
+    .status.success { color: #44ff44; }
+    .status.loading { color: #ffaa00; }
+    .auto-note { font-size: 10px; color: #555; text-align: center; margin-bottom: 10px; }
+    button {
+      width: 100%; padding: 12px; border: none; border-radius: 8px;
+      font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    #analyzeBtn {
+      background: linear-gradient(135deg, #ff9500, #ff5500); color: white; margin-bottom: 8px;
+    }
+    #analyzeBtn:hover { opacity: 0.9; transform: translateY(-1px); }
+    #analyzeBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .server-status {
+      font-size: 11px; text-align: center; margin-top: 8px; padding: 4px 8px; border-radius: 4px;
+    }
+    .server-status.online { color: #44ff44; background: rgba(68,255,68,0.1); }
+    .server-status.offline { color: #ff4444; background: rgba(255,68,68,0.1); }
+
+    #resultCard { display: none; margin-top: 12px; }
+    .result-card { background: #222244; border-radius: 8px; padding: 12px; border-left: 4px solid #666; }
+    .result-card.verdict-good { border-left-color: #44ff44; }
+    .result-card.verdict-maybe { border-left-color: #ffaa00; }
+    .result-card.verdict-skip { border-left-color: #ff4444; }
+    .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .result-title { font-size: 14px; font-weight: 600; color: #e0e0e0; }
+    .result-company { font-size: 12px; color: #aaa; }
+    .verdict-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .verdict-good { background: rgba(68,255,68,0.15); color: #44ff44; }
+    .verdict-maybe { background: rgba(255,170,0,0.15); color: #ffaa00; }
+    .verdict-skip { background: rgba(255,68,68,0.15); color: #ff4444; }
+    .score-bar { height: 4px; background: #333; border-radius: 2px; margin: 8px 0; overflow: hidden; }
+    .score-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+    .result-section { margin-top: 8px; }
+    .result-section-title { font-size: 11px; color: #777; text-transform: uppercase; margin-bottom: 4px; }
+    .result-summary { font-size: 12px; color: #bbb; line-height: 1.5; }
+    .skill-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .skill-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #2a2a4a; color: #aaa; }
+    .skill-tag.match { background: rgba(68,255,68,0.1); color: #44ff44; }
+    .skill-tag.missing { background: rgba(255,68,68,0.1); color: #ff6666; }
+    .red-flag { font-size: 11px; color: #ff6666; }
+    .recommendation { font-size: 12px; color: #ffcc00; margin-top: 6px; font-style: italic; }
+
+    .tabs { display: flex; margin-top: 12px; border-bottom: 1px solid #2a2a4a; }
+    .tab-btn {
+      flex: 1; width: auto; padding: 8px 4px; background: none; border: none; border-radius: 0;
+      color: #666; font-size: 12px; font-weight: 500; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn:hover { color: #aaa; }
+    .tab-btn.active { color: #ff9500; border-bottom-color: #ff9500; }
+    .tab-content { display: none; margin-top: 10px; }
+    .tab-content.active { display: block; }
+
+    .panel-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+    .panel-actions button {
+      width: auto; flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 500;
+      background: #2a2a4a; color: #aaa; border-radius: 4px;
+    }
+    .panel-actions button:hover { background: #3a3a5a; }
+    .panel-actions button.danger { color: #ff6666; }
+    .panel-actions button.danger:hover { background: #3a2020; }
+    .panel-actions button.primary { color: #ff9500; }
+    .panel-actions button.primary:hover { background: #3a2a1a; }
+
+    .empty-msg { text-align: center; color: #555; font-size: 12px; padding: 20px; }
+    .badge { font-size: 10px; background: #ff5500; color: white; padding: 1px 5px; border-radius: 8px; margin-left: 4px; }
+    .history-list { max-height: 250px; overflow-y: auto; }
+    .history-entry { padding: 8px; border-bottom: 1px solid #222244; cursor: pointer; transition: background 0.15s; }
+    .history-entry:hover { background: #2a2a4a; }
+    .history-header { display: flex; justify-content: space-between; align-items: center; }
+    .history-title { font-size: 12px; color: #ccc; font-weight: 500; }
+    .history-meta { font-size: 10px; color: #666; margin-top: 2px; }
+    .log-list { max-height: 250px; overflow-y: auto; font-size: 11px; }
+    .log-entry { padding: 6px 8px; border-bottom: 1px solid #222244; line-height: 1.4; }
+    .log-entry .log-time { color: #555; font-size: 10px; }
+    .log-entry .log-cat { font-weight: 600; margin-right: 4px; }
+    .log-entry.level-error .log-cat { color: #ff4444; }
+    .log-entry.level-warn .log-cat { color: #ffaa00; }
+    .log-entry.level-info .log-cat { color: #44aaff; }
+    .log-entry .log-msg { color: #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Job Scanner</h1>
+  <div id="serverStatus" class="server-status offline">Checking server...</div>
+  <div style="margin:6px 0 4px; display:flex; align-items:center; gap:6px;">
+    <label for="serverPort" style="font-size:11px;color:#aaa;white-space:nowrap;">Server port:</label>
+    <input id="serverPort" type="number" min="1" max="65535" value="5003" style="width:78px;background:#222244;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:4px 6px;font-size:11px;">
+    <button id="savePortBtn" style="width:auto;padding:4px 10px;font-size:11px;background:#2a2a4a;color:#ddd;">Save</button>
+    <span style="font-size:10px;color:#666;">same as PORT in the server's .env</span>
+  </div>
+
+  <!-- Feed capture: arm the feed window; the content script ships sniffed feed API pages -->
+  <div id="feedCapture" style="margin:8px 0;padding:8px;border:1px solid #2a2a4a;border-radius:8px;background:#20203a;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-size:12px;font-weight:600;color:#ff9500;">Feed Capture</span>
+      <span id="fcPopStatus" style="font-size:10px;color:#888;">Idle.</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;">
+      <button id="fcPopToggle" style="flex:1;width:auto;padding:8px;font-size:12px;background:#2a2a4a;color:#ddd;">Start capturing</button>
+      <button id="fcPopCopy" style="flex:1;width:auto;padding:8px;font-size:12px;background:#2a2a4a;color:#ddd;">Copy scroll script</button>
+    </div>
+    <button id="fcPopOpen" style="width:100%;padding:8px;font-size:12px;background:#2a2a4a;color:#ddd;">Open feed tab</button>
+    <div class="auto-note" style="margin:6px 0 0;color:#666">Start capturing, then <b style="color:#999">Copy scroll script</b> and paste it in the LinkedIn tab's console (F12) to scroll. Then "Load captured" on the /posts page.</div>
+  </div>
+
+  <script type="text/plain" id="fcScrollScript">// LinkedIn reliable auto scroll
+
+let count = 0;
+const maxScrolls = 80;
+
+// Randomly choose after how many scrolls to scroll up
+let nextScrollUpAt = Math.floor(Math.random() * 3) + 5; // 5-7
+
+const feed =
+  document.querySelector(".scaffold-finite-scroll__content") ||
+  document.querySelector("main") ||
+  document.documentElement;
+
+function autoScroll() {
+  if (count >= maxScrolls) {
+    console.log("Done scrolling");
+    return;
+  }
+
+  count++;
+
+  // Scroll up after every 5-7 downward scrolls
+  if (count % nextScrollUpAt === 0) {
+    const upAmount = Math.floor(Math.random() * 1500) + 500; // 500-2000px up
+
+    feed.scrollBy({
+      top: -upAmount,
+      behavior: "smooth",
+    });
+
+    console.log(`Scrolled UP ${upAmount}px`);
+
+    // Pick a new random interval for next time
+    nextScrollUpAt = Math.floor(Math.random() * 3) + 5;
+  } else {
+    const downAmount = Math.floor(Math.random() * 4000) + 8000; // 8000-12000px
+
+    feed.scrollBy({
+      top: downAmount,
+      behavior: "smooth",
+    });
+
+    console.log(`Scroll ${count}/${maxScrolls} (${downAmount}px down)`);
+  }
+
+  const nextDelay = Math.floor(Math.random() * 2000) + 2500; // 2.5-4.5s
+  setTimeout(autoScroll, nextDelay);
+}
+
+autoScroll();</script>
+
+  <div id="status" class="status"></div>
+  <button id="analyzeBtn" disabled>Analyze This Job</button>
+  <div class="auto-note">Auto-scans LinkedIn, Naukri, Indeed, Wellfound job pages</div>
+  <div id="resultCard"></div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="results">Results <span id="resultsBadge" class="badge" style="display:none">0</span></button>
+    <button class="tab-btn" data-tab="logs">Logs <span id="logBadge" class="badge" style="display:none">0</span></button>
+  </div>
+
+  <div id="tab-results" class="tab-content active">
+    <div class="panel-actions">
+      <button id="refreshResults">Refresh</button>
+      <button id="openDashboard" class="primary">Open Dashboard</button>
+    </div>
+    <div id="resultsList" class="history-list">
+      <div class="empty-msg">No analyzed jobs yet.</div>
+    </div>
+  </div>
+
+  <div id="tab-logs" class="tab-content">
+    <div class="panel-actions">
+      <button id="refreshLogs">Refresh</button>
+      <button id="clearLogs" class="danger">Clear Logs</button>
+    </div>
+    <div id="logList" class="log-list">
+      <div class="empty-msg">No logs yet.</div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
